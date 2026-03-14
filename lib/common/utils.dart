@@ -229,7 +229,7 @@ class Utils {
   }
 
   int getProxiesColumns(double viewWidth, ProxiesLayout proxiesLayout) {
-    final columns = max((viewWidth / 250).ceil(), 2);
+    final columns = max((viewWidth / 250).ceil(), 1);
     return switch (proxiesLayout) {
       ProxiesLayout.tight => columns + 1,
       ProxiesLayout.standard => columns,

@@ -130,7 +130,7 @@ Map<String, dynamic> _$SnifferConfigToJson(_SnifferConfig instance) =>
 
 _Tun _$TunFromJson(Map<String, dynamic> json) => _Tun(
   enable: json['enable'] as bool? ?? false,
-  device: json['device'] as String? ?? appName,
+  device: json['device'] as String? ?? 'SaveXSpace',
   autoRoute: json['auto-route'] as bool? ?? false,
   stack:
       $enumDecodeNullable(_$TunStackEnumMap, json['stack']) ?? TunStack.mixed,

@@ -91,7 +91,7 @@ class NotificationModule(private val service: Service) : Module() {
             )
         ) {
             setSmallIcon(R.drawable.ic)
-            setContentTitle("FlClash")
+            setContentTitle("SaveX Space")
             setContentIntent(intent.toPendingIntent)
             setPriority(NotificationCompat.PRIORITY_HIGH)
             setCategory(NotificationCompat.CATEGORY_SERVICE)

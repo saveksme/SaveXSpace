@@ -74,77 +74,18 @@ class _Title extends ConsumerWidget {
 
   const _Title(this.profileId);
 
-  String _getTitle(OverwriteType type) {
-    return switch (type) {
-      OverwriteType.standard => appLocalizations.standard,
-      OverwriteType.script => appLocalizations.script,
-      // OverwriteType.custom => appLocalizations.overwriteTypeCustom,
-    };
-  }
-
-  IconData _getIcon(OverwriteType type) {
-    return switch (type) {
-      OverwriteType.standard => Icons.stars,
-      OverwriteType.script => Icons.rocket,
-      // OverwriteType.custom => Icons.dashboard_customize,
-    };
-  }
-
-  String _getDesc(OverwriteType type) {
-    return switch (type) {
-      OverwriteType.standard => appLocalizations.standardModeDesc,
-      OverwriteType.script => appLocalizations.scriptModeDesc,
-      // OverwriteType.custom => appLocalizations.overwriteTypeCustomDesc,
-    };
-  }
-
-  void _handleChangeType(WidgetRef ref, OverwriteType type) {
-    ref.read(profilesProvider.notifier).updateProfile(profileId, (state) {
-      return state.copyWith(overwriteType: type);
-    });
-  }
-
   @override
   Widget build(context, ref) {
-    final overwriteType = ref.watch(overwriteTypeProvider(profileId));
+    // Force standard mode (no script tab)
     return SliverToBoxAdapter(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InfoHeader(info: Info(label: appLocalizations.overrideMode)),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Wrap(
-              spacing: 16,
-              children: [
-                for (final type in OverwriteType.values)
-                  CommonCard(
-                    isSelected: overwriteType == type,
-                    onPressed: () {
-                      _handleChangeType(ref, type);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          Icon(_getIcon(type)),
-                          const SizedBox(width: 8),
-                          Flexible(child: Text(_getTitle(type))),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          SizedBox(height: 12),
+          InfoHeader(info: Info(label: 'Переопределение правил')),
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              _getDesc(overwriteType),
+              'Добавляйте свои правила маршрутизации для приложений, доменов и IP-адресов',
               style: context.textTheme.bodySmall?.copyWith(
                 color: context.colorScheme.onSurfaceVariant.opacity80,
               ),
@@ -163,12 +104,8 @@ class _Content extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, ref) {
-    final overwriteType = ref.watch(overwriteTypeProvider(profileId));
-    return switch (overwriteType) {
-      OverwriteType.standard => _StandardContent(profileId),
-      OverwriteType.script => _ScriptContent(profileId),
-      // OverwriteType.custom => SliverToBoxAdapter(),
-    };
+    // Always use standard mode (script mode hidden)
+    return _StandardContent(profileId);
   }
 }
 

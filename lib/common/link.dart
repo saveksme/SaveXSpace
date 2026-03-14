@@ -15,21 +15,35 @@ class LinkManager {
     _appLinks = AppLinks();
   }
 
+  void _handleUri(Uri uri, Function(String url) callback) {
+    commonPrint.log('onAppLink raw: $uri');
+    commonPrint.log('onAppLink scheme: ${uri.scheme}, host: ${uri.host}, path: ${uri.path}, query: ${uri.query}');
+    commonPrint.log('onAppLink queryParameters: ${uri.queryParameters}');
+    // Support both xspace://install-config?url=X and xspace://install-config/url=X formats
+    if (uri.host == 'install-config' || uri.path.contains('install-config')) {
+      final parameters = uri.queryParameters;
+      final url = parameters['url'];
+      commonPrint.log('onAppLink url param: $url');
+      if (url != null && url.isNotEmpty) {
+        callback(url);
+      }
+    }
+  }
+
   Future<void> initAppLinksListen(
       Function(String url) installConfigCallBack) async {
     commonPrint.log('initAppLinksListen');
     destroy();
+    // Handle initial link (app launched via deep link)
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleUri(initialUri, installConfigCallBack);
+      }
+    } catch (_) {}
+    // Handle subsequent links (app already running)
     subscription = _appLinks.uriLinkStream.listen(
-      (uri) {
-        commonPrint.log('onAppLink: $uri');
-        if (uri.host == 'install-config') {
-          final parameters = uri.queryParameters;
-          final url = parameters['url'];
-          if (url != null) {
-            installConfigCallBack(url);
-          }
-        }
-      },
+      (uri) => _handleUri(uri, installConfigCallBack),
     );
   }
 

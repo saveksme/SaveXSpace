@@ -25,18 +25,36 @@ class Request {
         final client = HttpClient();
         client.findProxy = (Uri uri) {
           client.userAgent = appController.ua;
-          return FlClashHttpOverrides.handleFindProxy(uri);
+          return SaveXSpaceHttpOverrides.handleFindProxy(uri);
         };
         return client;
       },
     );
   }
 
-  Future<Response<Uint8List>> getFileResponseForUrl(String url) async {
+  Future<Response<Uint8List>> getFileResponseForUrl(
+    String url, {
+    Map<String, String>? extraHeaders,
+  }) async {
     try {
+      String ua;
+      try {
+        ua = appController.ua;
+      } catch (_) {
+        ua = 'clash-meta $appName clash-verge Platform/${Platform.operatingSystem}';
+      }
+      final headers = <String, String>{
+        'User-Agent': ua,
+      };
+      if (extraHeaders != null) {
+        headers.addAll(extraHeaders);
+      }
       return await _clashDio.get<Uint8List>(
         url,
-        options: Options(responseType: ResponseType.bytes),
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: headers,
+        ),
       );
     } catch (e) {
       commonPrint.log('getFileResponseForUrl error ${e.toString()}');

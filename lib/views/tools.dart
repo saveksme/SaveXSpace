@@ -12,6 +12,7 @@ import 'package:fl_clash/views/backup_and_restore.dart';
 import 'package:fl_clash/views/config/config.dart';
 import 'package:fl_clash/views/hotkey.dart';
 import 'package:fl_clash/widgets/widgets.dart';
+import 'package:fl_clash/widgets/onboarding.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -57,6 +58,7 @@ class _ToolViewState extends ConsumerState<ToolsView> {
     return generateSection(
       title: context.appLocalizations.other,
       items: [
+        const _OnboardingGuideItem(),
         _DisclaimerItem(),
         if (enableDeveloperMode) _DeveloperItem(),
         _InfoItem(),
@@ -69,7 +71,6 @@ class _ToolViewState extends ConsumerState<ToolsView> {
       title: context.appLocalizations.settings,
       items: [
         const _LocaleItem(),
-        const _ThemeItem(),
         const _BackupItem(),
         if (system.isDesktop) const _HotkeyItem(),
         if (system.isWindows) const _LoopbackItem(),
@@ -265,6 +266,22 @@ class _SettingItem extends StatelessWidget {
       title: Text(context.appLocalizations.application),
       subtitle: Text(context.appLocalizations.applicationDesc),
       delegate: OpenDelegate(widget: const ApplicationSettingView()),
+    );
+  }
+}
+
+class _OnboardingGuideItem extends StatelessWidget {
+  const _OnboardingGuideItem();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListItem(
+      leading: const Icon(Icons.school_outlined),
+      title: const Text('Гайд по приложению'),
+      subtitle: const Text('Пройти обучение заново'),
+      onTap: () {
+        OnboardingGuide.show(context);
+      },
     );
   }
 }

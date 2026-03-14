@@ -31,7 +31,7 @@ GroupsState currentGroupsState(Ref ref) {
   return GroupsState(
     value: switch (mode) {
       Mode.direct => [],
-      Mode.global => groups.toList(),
+      Mode.global => groups.where((element) => element.name == GroupName.GLOBAL.name).toList(),
       Mode.rule =>
         groups
             .where((item) => item.hidden == false)

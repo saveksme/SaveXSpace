@@ -268,18 +268,9 @@ class AppIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: ShapeDecoration(
-        color: context.colorScheme.surfaceContainerHighest,
-        shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-      ),
-      padding: EdgeInsets.all(8),
-      child: Transform.translate(
-        offset: Offset(0, -1),
-        child: Image.asset('assets/images/icon.png', width: 34, height: 34),
-      ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Image.asset('assets/images/icon.png', width: 36, height: 36),
     );
   }
 }

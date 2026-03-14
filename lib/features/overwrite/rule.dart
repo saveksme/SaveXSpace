@@ -1,5 +1,7 @@
 library;
 
+import 'dart:io';
+
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/clash_config.dart';
@@ -86,6 +88,66 @@ class RuleStatusItem extends StatelessWidget {
   }
 }
 
+// Intuitive Russian descriptions for rule actions
+String _ruleActionLabel(RuleAction action) {
+  return switch (action) {
+    RuleAction.DOMAIN => 'Домен (точный)',
+    RuleAction.DOMAIN_SUFFIX => 'Домен (суффикс)',
+    RuleAction.DOMAIN_KEYWORD => 'Домен (ключевое слово)',
+    RuleAction.DOMAIN_REGEX => 'Домен (regex)',
+    RuleAction.GEOSITE => 'Геосайт',
+    RuleAction.IP_CIDR => 'IP-адрес (CIDR)',
+    RuleAction.IP_CIDR6 => 'IPv6-адрес (CIDR)',
+    RuleAction.IP_SUFFIX => 'IP-суффикс',
+    RuleAction.IP_ASN => 'IP по ASN',
+    RuleAction.GEOIP => 'GeoIP (страна)',
+    RuleAction.SRC_GEOIP => 'Исходный GeoIP',
+    RuleAction.SRC_IP_ASN => 'Исходный IP (ASN)',
+    RuleAction.SRC_IP_CIDR => 'Исходный IP (CIDR)',
+    RuleAction.SRC_IP_SUFFIX => 'Исходный IP-суффикс',
+    RuleAction.DST_PORT => 'Порт назначения',
+    RuleAction.SRC_PORT => 'Исходный порт',
+    RuleAction.IN_PORT => 'Входящий порт',
+    RuleAction.IN_TYPE => 'Тип подключения',
+    RuleAction.IN_USER => 'Пользователь',
+    RuleAction.IN_NAME => 'Имя подключения',
+    RuleAction.PROCESS_NAME => 'Приложение (имя)',
+    RuleAction.PROCESS_NAME_REGEX => 'Приложение (regex)',
+    RuleAction.PROCESS_PATH => 'Приложение (путь)',
+    RuleAction.PROCESS_PATH_REGEX => 'Приложение (путь regex)',
+    RuleAction.UID => 'UID процесса',
+    RuleAction.NETWORK => 'Сеть (TCP/UDP)',
+    RuleAction.DSCP => 'DSCP',
+    RuleAction.AND => 'И (логическое)',
+    RuleAction.OR => 'ИЛИ (логическое)',
+    RuleAction.NOT => 'НЕ (логическое)',
+    _ => action.value,
+  };
+}
+
+String _ruleTargetLabel(String target) {
+  return switch (target) {
+    'DIRECT' => 'Напрямую',
+    'REJECT' => 'Заблокировать',
+    'MATCH' => 'По умолчанию',
+    _ => target,
+  };
+}
+
+String _contentHint(RuleAction action) {
+  return switch (action) {
+    RuleAction.DOMAIN || RuleAction.DOMAIN_SUFFIX || RuleAction.DOMAIN_KEYWORD || RuleAction.DOMAIN_REGEX => 'Домен (напр. google.com)',
+    RuleAction.IP_CIDR || RuleAction.IP_CIDR6 || RuleAction.SRC_IP_CIDR => 'IP-адрес (напр. 192.168.1.0/24)',
+    RuleAction.DST_PORT || RuleAction.SRC_PORT || RuleAction.IN_PORT => 'Порт (напр. 443)',
+    RuleAction.PROCESS_NAME || RuleAction.PROCESS_NAME_REGEX => 'Имя процесса (напр. chrome.exe)',
+    RuleAction.PROCESS_PATH || RuleAction.PROCESS_PATH_REGEX => 'Путь к exe',
+    RuleAction.GEOIP || RuleAction.SRC_GEOIP => 'Код страны (напр. RU)',
+    RuleAction.GEOSITE => 'Геосайт (напр. google)',
+    RuleAction.NETWORK => 'tcp или udp',
+    _ => 'Значение',
+  };
+}
+
 class AddOrEditRuleDialog extends StatefulWidget {
   final Rule? rule;
 
@@ -113,7 +175,7 @@ class _AddOrEditRuleDialogState extends State<AddOrEditRuleDialog> {
   void _initState() {
     _targetItems = [
       ...RuleTarget.values.map(
-        (item) => DropdownMenuEntry(value: item.name, label: item.name),
+        (item) => DropdownMenuEntry(value: item.name, label: '${_ruleTargetLabel(item.name)} (${item.name})'),
       ),
     ];
     if (widget.rule != null) {
@@ -136,6 +198,60 @@ class _AddOrEditRuleDialogState extends State<AddOrEditRuleDialog> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.rule != widget.rule) {
       _initState();
+    }
+  }
+
+  bool _isProcessRule(RuleAction action) {
+    return [
+      RuleAction.PROCESS_NAME,
+      RuleAction.PROCESS_NAME_REGEX,
+      RuleAction.PROCESS_PATH,
+      RuleAction.PROCESS_PATH_REGEX,
+    ].contains(action);
+  }
+
+  Future<void> _showProcessPicker() async {
+    final processes = await _getRunningProcesses();
+    if (!mounted || processes.isEmpty) return;
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _ProcessPickerDialog(
+        processes: processes,
+        isPathMode: _ruleAction == RuleAction.PROCESS_PATH || _ruleAction == RuleAction.PROCESS_PATH_REGEX,
+      ),
+    );
+    if (selected != null) {
+      _contentController.text = selected;
+      setState(() {});
+    }
+  }
+
+  Future<List<_ProcessInfo>> _getRunningProcesses() async {
+    if (!Platform.isWindows) return [];
+    try {
+      final result = await Process.run(
+        'powershell',
+        ['-Command', 'Get-Process | Where-Object {\$_.MainWindowTitle -ne ""} | Select-Object ProcessName, Path -Unique | ConvertTo-Csv -NoTypeInformation'],
+      );
+      final lines = (result.stdout as String).split('\n').skip(1);
+      final Map<String, _ProcessInfo> unique = {};
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        // Parse CSV: "name","path"
+        final parts = trimmed.split('","');
+        if (parts.isEmpty) continue;
+        final name = parts[0].replaceAll('"', '').trim();
+        final path = parts.length > 1 ? parts[1].replaceAll('"', '').trim() : '';
+        if (name.isNotEmpty && !unique.containsKey(name.toLowerCase())) {
+          unique[name.toLowerCase()] = _ProcessInfo(name: '$name.exe', path: path);
+        }
+      }
+      final list = unique.values.toList();
+      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      return list;
+    } catch (_) {
+      return [];
     }
   }
 
@@ -191,16 +307,16 @@ class _AddOrEditRuleDialogState extends State<AddOrEditRuleDialog> {
                           await globalState.showCommonDialog<RuleAction>(
                             filter: false,
                             child: OptionsDialog<RuleAction>(
-                              title: appLocalizations.ruleName,
+                              title: 'Тип правила',
                               options: RuleAction.addedRuleActions,
-                              textBuilder: (item) => item.value,
+                              textBuilder: (item) => _ruleActionLabel(item),
                               value: _ruleAction,
                             ),
                           ) ??
                           _ruleAction;
                       setState(() {});
                     },
-                    child: Text(_ruleAction.value),
+                    child: Text(_ruleActionLabel(_ruleAction)),
                   ),
                   SizedBox(height: 24),
                   TextFormField(
@@ -211,7 +327,14 @@ class _AddOrEditRuleDialogState extends State<AddOrEditRuleDialog> {
                     controller: _contentController,
                     decoration: InputDecoration(
                       border: const OutlineInputBorder(),
-                      labelText: appLocalizations.content,
+                      labelText: _contentHint(_ruleAction),
+                      suffixIcon: _isProcessRule(_ruleAction)
+                          ? IconButton(
+                              icon: const Icon(Icons.apps_rounded, size: 20),
+                              tooltip: 'Выбрать из запущенных',
+                              onPressed: () => _showProcessPicker(),
+                            )
+                          : null,
                     ),
                     validator: (_) {
                       if (_contentController.text.isEmpty) {
@@ -222,6 +345,31 @@ class _AddOrEditRuleDialogState extends State<AddOrEditRuleDialog> {
                       return null;
                     },
                   ),
+                  if (_isProcessRule(_ruleAction))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => _showProcessPicker(),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.list_alt_rounded, size: 14, color: Theme.of(context).colorScheme.primary),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Выбрать из запущенных приложений',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   SizedBox(height: 24),
                   FormField<String>(
                     validator: (_) {
@@ -296,6 +444,110 @@ class _AddOrEditRuleDialogState extends State<AddOrEditRuleDialog> {
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProcessInfo {
+  final String name;
+  final String path;
+  const _ProcessInfo({required this.name, required this.path});
+}
+
+class _ProcessPickerDialog extends StatefulWidget {
+  final List<_ProcessInfo> processes;
+  final bool isPathMode;
+
+  const _ProcessPickerDialog({
+    required this.processes,
+    this.isPathMode = false,
+  });
+
+  @override
+  State<_ProcessPickerDialog> createState() => _ProcessPickerDialogState();
+}
+
+class _ProcessPickerDialogState extends State<_ProcessPickerDialog> {
+  String _search = '';
+
+  List<_ProcessInfo> get _filtered {
+    if (_search.isEmpty) return widget.processes;
+    final q = _search.toLowerCase();
+    return widget.processes
+        .where((p) => p.name.toLowerCase().contains(q) || p.path.toLowerCase().contains(q))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 500),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                'Запущенные приложения',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Поиск...',
+                  prefixIcon: Icon(Icons.search, size: 20),
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (v) => setState(() => _search = v),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: _filtered.isEmpty
+                  ? const Center(child: Text('Ничего не найдено'))
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _filtered.length,
+                      itemBuilder: (_, i) {
+                        final p = _filtered[i];
+                        return ListTile(
+                          dense: true,
+                          leading: Icon(Icons.memory_rounded, size: 18, color: primaryColor.withValues(alpha: 0.6)),
+                          title: Text(p.name, style: const TextStyle(fontSize: 13)),
+                          subtitle: p.path.isNotEmpty
+                              ? Text(
+                                  p.path,
+                                  style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.4)),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                )
+                              : null,
+                          onTap: () {
+                            Navigator.of(context).pop(
+                              widget.isPathMode ? p.path : p.name,
+                            );
+                          },
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Отмена'),
+              ),
+            ),
+          ],
         ),
       ),
     );

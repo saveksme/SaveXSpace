@@ -25,7 +25,7 @@ var
   i: Integer;
   ResultCode: Integer;
 begin
-  Processes := ['FlClash.exe', 'FlClashCore.exe', 'FlClashHelperService.exe'];
+  Processes := ['SaveXSpace.exe', 'SaveXSpaceCore.exe', 'SaveXSpaceHelperService.exe'];
 
   for i := 0 to GetArrayLength(Processes)-1 do
   begin

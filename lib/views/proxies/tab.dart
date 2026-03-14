@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/models/common.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/widgets/widgets.dart';
@@ -205,16 +206,36 @@ class ProxiesTabViewState extends ConsumerState<ProxiesTabView>
                     overlayColor: const WidgetStatePropertyAll(
                       Colors.transparent,
                     ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicator: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: context.colorScheme.primary.withValues(alpha: 0.12),
+                      border: Border.all(
+                        color: context.colorScheme.primary.withValues(alpha: 0.25),
+                        width: 1,
+                      ),
+                    ),
+                    labelColor: context.colorScheme.primary,
+                    unselectedLabelColor: context.colorScheme.onSurface.withValues(alpha: 0.4),
+                    labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+                    unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
                     tabs: [
                       for (final group in groups)
                         Tab(
-                          child: Builder(
-                            builder: (context) {
-                              return EmojiText(
-                                group.name,
-                                style: DefaultTextStyle.of(context).style,
-                              );
-                            },
+                          height: 38,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Builder(
+                              builder: (context) {
+                                final displayName = group.name == GroupName.GLOBAL.name
+                                    ? appLocalizations.global
+                                    : group.name;
+                                return EmojiText(
+                                  displayName,
+                                  style: DefaultTextStyle.of(context).style,
+                                );
+                              },
+                            ),
                           ),
                         ),
                     ],
@@ -342,8 +363,8 @@ class _ProxyGroupViewState extends ConsumerState<ProxyGroupView> {
         ),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: widget.columns,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
           mainAxisExtent: getItemHeight(widget.cardType),
         ),
         itemCount: currentProxies.length,

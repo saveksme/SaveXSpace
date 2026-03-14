@@ -62,11 +62,10 @@ class GlobalState {
   }
 
   Future<void> _initDynamicColor() async {
+    // Use fixed purple accent for SaveX Space minimalist theme
+    accentColor = const Color(defaultPrimaryColor);
     try {
       corePalette = await DynamicColorPlugin.getCorePalette();
-      accentColor =
-          await DynamicColorPlugin.getAccentColor() ??
-          Color(defaultPrimaryColor);
     } catch (_) {}
   }
 

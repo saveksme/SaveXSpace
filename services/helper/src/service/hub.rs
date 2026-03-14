@@ -5,6 +5,8 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, Error, Read};
 use std::process::{Command, Stdio};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::sync::{Arc, Mutex};
 use std::{io, thread};
 use warp::{Filter, Reply};
@@ -45,10 +47,11 @@ fn start(start_params: StartParams) -> impl Reply {
     }
     stop();
     let mut process = PROCESS.lock().unwrap();
-    match Command::new(&start_params.path)
-        .stderr(Stdio::piped())
-        .arg(&start_params.arg)
-        .spawn()
+    let mut cmd = Command::new(&start_params.path);
+    cmd.stderr(Stdio::piped()).arg(&start_params.arg);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    match cmd.spawn()
     {
         Ok(child) => {
             *process = Some(child);

@@ -47,6 +47,12 @@ class TUNItem extends ConsumerWidget {
           ref
               .read(patchClashConfigProvider.notifier)
               .update((state) => state.copyWith.tun(enable: value));
+          // TUN and system proxy are mutually exclusive
+          if (value) {
+            ref
+                .read(networkSettingProvider.notifier)
+                .update((state) => state.copyWith(systemProxy: false));
+          }
         },
       ),
     );
@@ -117,6 +123,12 @@ class SystemProxyItem extends ConsumerWidget {
           ref
               .read(networkSettingProvider.notifier)
               .update((state) => state.copyWith(systemProxy: value));
+          // TUN and system proxy are mutually exclusive
+          if (value) {
+            ref
+                .read(patchClashConfigProvider.notifier)
+                .update((state) => state.copyWith.tun(enable: false));
+          }
         },
       ),
     );

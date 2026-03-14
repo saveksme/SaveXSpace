@@ -13,8 +13,9 @@ Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     final version = await system.version;
+    await deviceId.init();
     final container = await globalState.init(version);
-    HttpOverrides.global = FlClashHttpOverrides();
+    HttpOverrides.global = SaveXSpaceHttpOverrides();
     runApp(
       UncontrolledProviderScope(
         container: container,

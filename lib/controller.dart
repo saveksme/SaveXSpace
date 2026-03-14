@@ -7,6 +7,7 @@ import 'package:fl_clash/plugins/app.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/widgets/dialog.dart';
+import 'package:fl_clash/widgets/success_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -58,10 +59,20 @@ extension InitControllerExt on AppController {
     await _handleFailedPreference();
     await _handlerDisclaimer();
     await _showCrashlyticsTip();
+    _autoSelectProfileIfNeeded();
     await _connectCore();
     await _initCore();
     await _initStatus();
     _ref.read(initProvider.notifier).value = true;
+  }
+
+  void _autoSelectProfileIfNeeded() {
+    final currentId = _ref.read(currentProfileIdProvider);
+    if (currentId != null) return;
+    final profiles = _ref.read(profilesProvider);
+    if (profiles.isEmpty) return;
+    commonPrint.log('Auto-selecting first profile: ${profiles.first.id}');
+    _ref.read(currentProfileIdProvider.notifier).value = profiles.first.id;
   }
 
   Future<void> _handleFailedPreference() async {
@@ -344,6 +355,10 @@ extension ProfilesControllerExt on AppController {
     }, title: appLocalizations.addProfile);
     if (profile != null) {
       putProfile(profile);
+      final ctx = globalState.navigatorKey.currentContext;
+      if (ctx != null) {
+        SuccessOverlay.show(ctx, message: profile.realLabel);
+      }
     }
   }
 
@@ -429,6 +444,12 @@ extension ProxiesControllerExt on AppController {
   Future<void> updateGroups() async {
     try {
       commonPrint.log('updateGroups');
+      final currentProfileId = _ref.read(currentProfileIdProvider);
+      if (currentProfileId == null) {
+        commonPrint.log('updateGroups: no profile selected, skipping');
+        _ref.read(groupsProvider.notifier).value = [];
+        return;
+      }
       _ref.read(groupsProvider.notifier).value = await retry(
         task: () async {
           final sortType = _ref.read(
@@ -733,10 +754,14 @@ extension SetupControllerExt on AppController {
   Future<void> _setupConfig([VoidCallback? preloadInvoke]) async {
     commonPrint.log('setup ===>');
     var profile = _ref.read(currentProfileProvider);
-    final nextProfile = await profile?.checkAndUpdateAndCopy();
-    if (nextProfile != null) {
-      profile = nextProfile;
-      _ref.read(profilesProvider.notifier).put(nextProfile);
+    try {
+      final nextProfile = await profile?.checkAndUpdateAndCopy();
+      if (nextProfile != null) {
+        profile = nextProfile;
+        _ref.read(profilesProvider.notifier).put(nextProfile);
+      }
+    } catch (e) {
+      commonPrint.log('checkAndUpdateAndCopy error: $e');
     }
     final patchConfig = _ref.read(patchClashConfigProvider);
     final res = await _requestAdmin(patchConfig.tun.enable);
@@ -944,9 +969,16 @@ extension SystemControllerExt on AppController {
   }
 
   void updateSystemProxy() {
+    final newSystemProxy = !_ref.read(networkSettingProvider).systemProxy;
     _ref
         .read(networkSettingProvider.notifier)
-        .update((state) => state.copyWith(systemProxy: !state.systemProxy));
+        .update((state) => state.copyWith(systemProxy: newSystemProxy));
+    // TUN and system proxy are mutually exclusive
+    if (newSystemProxy) {
+      _ref
+          .read(patchClashConfigProvider.notifier)
+          .update((state) => state.copyWith.tun(enable: false));
+    }
   }
 
   void updateAutoLaunch() {
@@ -1045,7 +1077,10 @@ extension BackupControllerExt on AppController {
       _ref.read(currentProfileIdProvider.notifier).value =
           config.currentProfileId;
       _ref.read(davSettingProvider.notifier).value = config.davProps;
-      _ref.read(themeSettingProvider.notifier).value = config.themeProps;
+      _ref.read(themeSettingProvider.notifier).value = config.themeProps.copyWith(
+        themeMode: ThemeMode.dark,
+        pureBlack: true,
+      );
       _ref.read(windowSettingProvider.notifier).value = config.windowProps;
       _ref.read(vpnSettingProvider.notifier).value = config.vpnProps;
       _ref.read(proxiesStyleSettingProvider.notifier).value =

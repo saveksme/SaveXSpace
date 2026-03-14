@@ -199,14 +199,20 @@ class AppSidebarContainer extends ConsumerWidget {
                             scrollable: true,
                             minExtendedWidth: 200,
                             backgroundColor: Colors.transparent,
-                            selectedLabelTextStyle: context
-                                .textTheme
-                                .labelLarge!
-                                .copyWith(color: context.colorScheme.onSurface),
-                            unselectedLabelTextStyle: context
-                                .textTheme
-                                .labelLarge!
-                                .copyWith(color: context.colorScheme.onSurface),
+                            selectedLabelTextStyle: TextStyle(
+                                fontFamily: 'SpaceGrotesk',
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: context.colorScheme.primary,
+                                letterSpacing: 0.8,
+                              ),
+                            unselectedLabelTextStyle: TextStyle(
+                                fontFamily: 'SpaceGrotesk',
+                                fontSize: 10,
+                                fontWeight: FontWeight.w400,
+                                color: context.colorScheme.onSurface.withValues(alpha: 0.5),
+                                letterSpacing: 0.8,
+                              ),
                             destinations: navigationItems
                                 .map(
                                   (e) => NavigationRailDestination(

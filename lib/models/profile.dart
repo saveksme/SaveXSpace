@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -57,6 +58,7 @@ abstract class Profile with _$Profile {
     @Default(OverwriteType.standard) OverwriteType overwriteType,
     int? scriptId,
     int? order,
+    String? announce,
   }) = _Profile;
 
   factory Profile.fromJson(Map<String, Object?> json) =>
@@ -210,8 +212,41 @@ extension ProfileExtension on Profile {
     return _getFile();
   }
 
+  static String? _decodeAnnounce(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    // XTLS standard: "base64:<base64-encoded-utf8>"
+    if (raw.startsWith('base64:')) {
+      try {
+        return utf8.decode(base64Decode(raw.substring(7)));
+      } catch (_) {
+        return raw;
+      }
+    }
+    // Try URL-decoding as fallback
+    try {
+      final decoded = Uri.decodeComponent(raw);
+      return decoded != raw ? decoded : raw;
+    } catch (_) {
+      return raw;
+    }
+  }
+
   Future<Profile> update() async {
-    final response = await request.getFileResponseForUrl(url);
+    final response = await request.getFileResponseForUrl(
+      url,
+      extraHeaders: deviceId.headers,
+    );
+    final data = response.data ?? Uint8List.fromList([]);
+
+    // Check for HWID device limit exceeded (server returns empty config)
+    final hwidLimitHeader = response.headers.value('x-hwid-limit');
+    final rawAnnounce = response.headers.value('announce');
+    final announceHeader = _decodeAnnounce(rawAnnounce);
+    if (data.isEmpty && hwidLimitHeader != null) {
+      final message = announceHeader ?? 'Device limit reached (max: $hwidLimitHeader)';
+      throw message;
+    }
+
     final disposition = response.headers.value('content-disposition');
     final userinfo = response.headers.value('subscription-userinfo');
     return await copyWith(
@@ -220,7 +255,8 @@ extension ProfileExtension on Profile {
         id.toString(),
       ]),
       subscriptionInfo: SubscriptionInfo.formHString(userinfo),
-    ).saveFile(response.data ?? Uint8List.fromList([]));
+      announce: announceHeader,
+    ).saveFile(data);
   }
 
   Future<Profile> saveFile(Uint8List bytes) async {

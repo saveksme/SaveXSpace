@@ -93,9 +93,9 @@ class Build {
     BuildItem(target: Target.android, arch: Arch.amd64, archName: 'x86_64'),
   ];
 
-  static String get appName => 'FlClash';
+  static String get appName => 'SaveX Space';
 
-  static String get coreName => 'FlClashCore';
+  static String get coreName => 'SaveXSpaceCore';
 
   static String get libName => 'libclash';
 
@@ -150,10 +150,10 @@ class Build {
       runInShell: runInShell,
     );
     process.stdout.listen((data) {
-      print(utf8.decode(data));
+      print(utf8.decode(data, allowMalformed: true));
     });
     process.stderr.listen((data) {
-      print(utf8.decode(data));
+      print(utf8.decode(data, allowMalformed: true));
     });
     final exitCode = await process.exitCode;
     if (exitCode != 0 && name != null) throw '$name error';
@@ -280,7 +280,7 @@ class Build {
     final targetPath = join(
       outDir,
       target.name,
-      'FlClashHelperService${target.executableExtensionName}',
+      'SaveXSpaceHelperService${target.executableExtensionName}',
     );
     await File(outPath).copy(targetPath);
   }
@@ -461,7 +461,11 @@ class BuildCommand extends Command {
 
     if (Platform.isWindows) {
       coreSha256 = await Build.calcSha256(corePaths.first);
-      await Build.buildHelper(target, coreSha256);
+      try {
+        await Build.buildHelper(target, coreSha256);
+      } catch (e) {
+        print('Warning: helper build skipped ($e). Cargo/Rust may not be installed.');
+      }
     }
     await _buildEnvFile(env, coreSha256: coreSha256);
     if (out != 'app') {
