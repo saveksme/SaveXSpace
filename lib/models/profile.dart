@@ -238,10 +238,27 @@ extension ProfileExtension on Profile {
     );
     final data = response.data ?? Uint8List.fromList([]);
 
-    // Check for HWID device limit exceeded (server returns empty config)
-    final hwidLimitHeader = response.headers.value('x-hwid-limit');
-    final rawAnnounce = response.headers.value('announce');
+    // Collect provider headers (like FlClashX)
+    final headersToCollect = ['announce', 'support-url', 'profile-update-interval', 'x-hwid-limit'];
+    final providerHeaders = <String, String>{};
+    for (final headerName in headersToCollect) {
+      final value = response.headers.value(headerName);
+      if (value != null && value.isNotEmpty) {
+        providerHeaders[headerName] = value;
+      }
+    }
+    // Also collect flclashx-* custom headers
+    response.headers.forEach((name, values) {
+      if (name.startsWith('flclashx-') && values.isNotEmpty) {
+        providerHeaders[name] = values.first;
+      }
+    });
+
+    final hwidLimitHeader = providerHeaders['x-hwid-limit'];
+    final rawAnnounce = providerHeaders['announce'];
     final announceHeader = _decodeAnnounce(rawAnnounce);
+
+    // Check for HWID device limit exceeded (server returns empty config)
     if (data.isEmpty && hwidLimitHeader != null) {
       final message = announceHeader ?? 'Device limit reached (max: $hwidLimitHeader)';
       throw message;
@@ -249,6 +266,17 @@ extension ProfileExtension on Profile {
 
     final disposition = response.headers.value('content-disposition');
     final userinfo = response.headers.value('subscription-userinfo');
+
+    // Parse profile-update-interval if provided by server
+    Duration updateDuration = autoUpdateDuration;
+    final updateInterval = providerHeaders['profile-update-interval'];
+    if (updateInterval != null) {
+      final hours = int.tryParse(updateInterval);
+      if (hours != null && hours > 0) {
+        updateDuration = Duration(hours: hours);
+      }
+    }
+
     return await copyWith(
       label: label.takeFirstValid([
         utils.getFileNameForDisposition(disposition),
@@ -256,6 +284,7 @@ extension ProfileExtension on Profile {
       ]),
       subscriptionInfo: SubscriptionInfo.formHString(userinfo),
       announce: announceHeader,
+      autoUpdateDuration: updateDuration,
     ).saveFile(data);
   }
 

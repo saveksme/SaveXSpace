@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -18,9 +20,11 @@ class DashboardView extends ConsumerStatefulWidget {
 }
 
 class _DashboardViewState extends ConsumerState<DashboardView>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+  late AnimationController _connectingController;
+  late AnimationController _rippleController;
 
   @override
   void initState() {
@@ -33,16 +37,30 @@ class _DashboardViewState extends ConsumerState<DashboardView>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
     _pulseController.repeat(reverse: true);
+
+    _connectingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+
+    _rippleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _connectingController.dispose();
+    _rippleController.dispose();
     super.dispose();
   }
 
   void _handleToggle() {
     final isStart = ref.read(isStartProvider);
+    // Trigger ripple animation on tap
+    _rippleController.forward(from: 0.0);
     debouncer.call(FunctionTag.updateStatus, () {
       appController.updateStatus(!isStart, isInit: !ref.read(initProvider));
     }, duration: commonDuration);
@@ -60,6 +78,13 @@ class _DashboardViewState extends ConsumerState<DashboardView>
     final coreStatus = ref.watch(coreStatusProvider);
     final runTime = ref.watch(runTimeProvider);
     final primaryColor = Theme.of(context).colorScheme.primary;
+
+    // Manage connecting animation
+    if (coreStatus == CoreStatus.connecting) {
+      _connectingController.repeat();
+    } else {
+      _connectingController.stop();
+    }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -97,6 +122,8 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                         isConnecting: coreStatus == CoreStatus.connecting,
                         onTap: _handleToggle,
                         pulseAnimation: _pulseAnimation,
+                        connectingController: _connectingController,
+                        rippleController: _rippleController,
                         primaryColor: primaryColor,
                       ),
                       const SizedBox(height: 16),
@@ -174,10 +201,9 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                     const SizedBox(height: 16),
                     if (isStart) ...[
                       _SpeedCard(primaryColor: primaryColor),
-                      const SizedBox(height: 12),
-                      _TrafficCard(primaryColor: primaryColor),
                     ],
                     const SizedBox(height: 12),
+                    _AnnounceBanner(primaryColor: primaryColor),
                     _SubscriptionCard(primaryColor: primaryColor),
                     const SizedBox(height: 32),
                   ],
@@ -226,6 +252,8 @@ class _ConnectButton extends StatelessWidget {
   final bool isConnecting;
   final VoidCallback onTap;
   final Animation<double> pulseAnimation;
+  final AnimationController connectingController;
+  final AnimationController rippleController;
   final Color primaryColor;
 
   const _ConnectButton({
@@ -233,6 +261,8 @@ class _ConnectButton extends StatelessWidget {
     required this.isConnecting,
     required this.onTap,
     required this.pulseAnimation,
+    required this.connectingController,
+    required this.rippleController,
     required this.primaryColor,
   });
 
@@ -241,48 +271,221 @@ class _ConnectButton extends StatelessWidget {
     const size = 140.0;
     return GestureDetector(
       onTap: isConnecting ? null : onTap,
-      child: AnimatedBuilder(
-        animation: pulseAnimation,
-        builder: (context, child) {
-          final scale = isConnected ? pulseAnimation.value : 1.0;
-          return Transform.scale(scale: scale, child: child);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeOutCubic,
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isConnected
-                ? primaryColor.withValues(alpha: 0.15)
-                : const Color(0xFF1A1A1A),
-            border: Border.all(
-              color: isConnected
-                  ? primaryColor.withValues(alpha: 0.6)
-                  : const Color(0xFF2A2A2A),
-              width: 3,
-            ),
-            boxShadow: isConnected
-                ? [BoxShadow(color: primaryColor.withValues(alpha: 0.25), blurRadius: 40, spreadRadius: 5)]
-                : [],
-          ),
-          child: Center(
-            child: isConnecting
-                ? SizedBox(
-                    width: 36, height: 36,
-                    child: CircularProgressIndicator(strokeWidth: 3, color: primaryColor),
-                  )
-                : Icon(
-                    Icons.power_settings_new,
-                    size: 48,
-                    color: isConnected ? primaryColor : Colors.white38,
+      child: SizedBox(
+        width: size + 40,
+        height: size + 40,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Ripple effect on tap
+            AnimatedBuilder(
+              animation: rippleController,
+              builder: (context, _) {
+                final progress = rippleController.value;
+                if (progress == 0.0 || progress == 1.0) {
+                  return const SizedBox.shrink();
+                }
+                return Container(
+                  width: size + (60 * progress),
+                  height: size + (60 * progress),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: primaryColor.withValues(alpha: 0.4 * (1 - progress)),
+                      width: 2,
+                    ),
                   ),
-          ),
+                );
+              },
+            ),
+            // Orbiting dots during connecting state
+            if (isConnecting)
+              AnimatedBuilder(
+                animation: connectingController,
+                builder: (context, _) {
+                  return CustomPaint(
+                    size: Size(size + 30, size + 30),
+                    painter: _OrbitingDotsPainter(
+                      progress: connectingController.value,
+                      color: primaryColor,
+                      dotCount: 3,
+                    ),
+                  );
+                },
+              ),
+            // Outer glow ring during connecting
+            if (isConnecting)
+              AnimatedBuilder(
+                animation: connectingController,
+                builder: (context, _) {
+                  final glowAlpha = 0.1 + 0.15 * math.sin(connectingController.value * math.pi * 2);
+                  return Container(
+                    width: size + 16,
+                    height: size + 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: primaryColor.withValues(alpha: glowAlpha),
+                        width: 2,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            // Main button
+            AnimatedBuilder(
+              animation: pulseAnimation,
+              builder: (context, child) {
+                final scale = isConnected ? pulseAnimation.value : 1.0;
+                return Transform.scale(scale: scale, child: child);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.easeOutCubic,
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isConnected
+                      ? primaryColor.withValues(alpha: 0.15)
+                      : isConnecting
+                          ? primaryColor.withValues(alpha: 0.08)
+                          : const Color(0xFF1A1A1A),
+                  border: Border.all(
+                    color: isConnected
+                        ? primaryColor.withValues(alpha: 0.6)
+                        : isConnecting
+                            ? primaryColor.withValues(alpha: 0.35)
+                            : const Color(0xFF2A2A2A),
+                    width: 3,
+                  ),
+                  boxShadow: isConnected
+                      ? [BoxShadow(color: primaryColor.withValues(alpha: 0.25), blurRadius: 40, spreadRadius: 5)]
+                      : isConnecting
+                          ? [BoxShadow(color: primaryColor.withValues(alpha: 0.12), blurRadius: 30, spreadRadius: 2)]
+                          : [],
+                ),
+                child: Center(
+                  child: isConnecting
+                      ? _ConnectingIcon(
+                          controller: connectingController,
+                          primaryColor: primaryColor,
+                        )
+                      : Icon(
+                          Icons.power_settings_new,
+                          size: 48,
+                          color: isConnected ? primaryColor : Colors.white38,
+                        ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _ConnectingIcon extends StatelessWidget {
+  final AnimationController controller;
+  final Color primaryColor;
+
+  const _ConnectingIcon({
+    required this.controller,
+    required this.primaryColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            // Pulsing power icon
+            Opacity(
+              opacity: 0.3 + 0.4 * math.sin(controller.value * math.pi * 2).abs(),
+              child: Icon(
+                Icons.power_settings_new,
+                size: 48,
+                color: primaryColor,
+              ),
+            ),
+            // Rotating arc
+            SizedBox(
+              width: 56,
+              height: 56,
+              child: Transform.rotate(
+                angle: controller.value * math.pi * 2,
+                child: CustomPaint(
+                  painter: _ArcPainter(color: primaryColor),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ArcPainter extends CustomPainter {
+  final Color color;
+  _ArcPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    canvas.drawArc(rect, 0, math.pi * 0.7, false, paint);
+    canvas.drawArc(rect, math.pi, math.pi * 0.7, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _OrbitingDotsPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final int dotCount;
+
+  _OrbitingDotsPainter({
+    required this.progress,
+    required this.color,
+    this.dotCount = 3,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    for (int i = 0; i < dotCount; i++) {
+      final angle = (progress * math.pi * 2) + (i * math.pi * 2 / dotCount);
+      final dotX = center.dx + radius * math.cos(angle);
+      final dotY = center.dy + radius * math.sin(angle);
+
+      final dotAlpha = 0.3 + 0.7 * ((math.sin(progress * math.pi * 2 + i * 1.5) + 1) / 2);
+      final dotSize = 3.0 + 2.0 * ((math.sin(progress * math.pi * 2 + i * 2.0) + 1) / 2);
+
+      final paint = Paint()
+        ..color = color.withValues(alpha: dotAlpha)
+        ..style = PaintingStyle.fill;
+
+      canvas.drawCircle(Offset(dotX, dotY), dotSize, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _OrbitingDotsPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }
 
 class _ModeSelector extends StatelessWidget {
@@ -417,40 +620,50 @@ class _SpeedCard extends ConsumerWidget {
   }
 }
 
-// Total traffic usage card (compact row)
-class _TrafficCard extends ConsumerWidget {
+// Announcement banner from subscription provider
+class _AnnounceBanner extends ConsumerWidget {
   final Color primaryColor;
-  const _TrafficCard({required this.primaryColor});
+  const _AnnounceBanner({required this.primaryColor});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final totalTraffic = ref.watch(totalTrafficProvider);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D0D),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1A1A1A)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.data_usage_rounded, size: 16, color: primaryColor.withValues(alpha: 0.5)),
-          const SizedBox(width: 10),
-          Text(
-            '\u2191 ${totalTraffic.up.traffic.show}',
-            style: const TextStyle(fontSize: 12, color: Colors.white38, fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(width: 16),
-          Text(
-            '\u2193 ${totalTraffic.down.traffic.show}',
-            style: const TextStyle(fontSize: 12, color: Colors.white38, fontWeight: FontWeight.w500),
-          ),
-          const Spacer(),
-          Text(
-            appLocalizations.trafficUsage,
-            style: const TextStyle(fontSize: 10, color: Colors.white24, letterSpacing: 0.5),
-          ),
-        ],
+    final profile = ref.watch(currentProfileProvider);
+    if (profile == null || profile.announce == null || profile.announce!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: primaryColor.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: primaryColor.withValues(alpha: 0.12)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(Icons.campaign_rounded, size: 16, color: primaryColor.withValues(alpha: 0.6)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                profile.announce!,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: Colors.white.withValues(alpha: 0.6),
+                ),
+                maxLines: 5,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

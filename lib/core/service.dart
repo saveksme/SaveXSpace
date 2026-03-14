@@ -60,6 +60,7 @@ class CoreService extends CoreHandlerInterface {
           return null;
         }
       },
+      maxAttempts: 5,
       retryIf: (server) => server == null,
     );
     if (server == null) {

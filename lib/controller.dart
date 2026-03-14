@@ -450,6 +450,14 @@ extension ProxiesControllerExt on AppController {
         _ref.read(groupsProvider.notifier).value = [];
         return;
       }
+      // Check if profile YAML file exists on disk before trying retry
+      final profilePath = await appPath.getProfilePath(currentProfileId.toString());
+      final profileFile = File(profilePath);
+      if (!await profileFile.exists()) {
+        commonPrint.log('updateGroups: profile YAML file missing, skipping retry');
+        _ref.read(groupsProvider.notifier).value = [];
+        return;
+      }
       _ref.read(groupsProvider.notifier).value = await retry(
         task: () async {
           final sortType = _ref.read(
@@ -469,6 +477,7 @@ extension ProxiesControllerExt on AppController {
             defaultTestUrl: testUrl,
           );
         },
+        maxAttempts: 5,
         retryIf: (res) => res.isEmpty,
       );
     } catch (e) {
