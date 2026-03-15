@@ -152,6 +152,7 @@ class _ProxiesListViewState extends State<ProxiesListView> {
                           key: ValueKey('$groupName.${proxy.name}'),
                           proxy: proxy,
                           groupName: groupName,
+                          index: proxies.indexOf(proxy),
                         ),
                       ),
                     ),
@@ -345,20 +346,38 @@ class _ProxiesListViewState extends State<ProxiesListView> {
                         children: [
                           Positioned(
                             top: -headerState.offset,
-                            child: Container(
-                              width: container.maxWidth,
-                              color: context.colorScheme.surface,
-                              padding: const EdgeInsets.only(
-                                top: 16,
-                                left: 16,
-                                right: 16,
-                                bottom: 8,
-                              ),
-                              child: _buildHeader(
-                                ref,
-                                group: state.groups[index],
-                                currentUnfoldSet: state.currentUnfoldSet,
-                              ),
+                            child: Column(
+                              children: [
+                                Container(
+                                  width: container.maxWidth,
+                                  color: Colors.black,
+                                  padding: const EdgeInsets.only(
+                                    top: 16,
+                                    left: 16,
+                                    right: 16,
+                                    bottom: 0,
+                                  ),
+                                  child: _buildHeader(
+                                    ref,
+                                    group: state.groups[index],
+                                    currentUnfoldSet: state.currentUnfoldSet,
+                                  ),
+                                ),
+                                Container(
+                                  width: container.maxWidth,
+                                  height: 16,
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.black,
+                                        Color(0x00000000),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -428,6 +447,7 @@ class _ListHeaderState extends State<ListHeader> {
         return switch (iconStyle) {
           ProxiesIconStyle.standard => LayoutBuilder(
             builder: (_, constraints) {
+              final primaryColor = Theme.of(context).colorScheme.primary;
               return Container(
                 margin: const EdgeInsets.only(right: 16),
                 child: AspectRatio(
@@ -438,8 +458,8 @@ class _ListHeaderState extends State<ListHeader> {
                     alignment: Alignment.center,
                     padding: EdgeInsets.all(6.ap),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: context.colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                      color: primaryColor.withValues(alpha: 0.10),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: CommonTargetIcon(
@@ -470,12 +490,22 @@ class _ListHeaderState extends State<ListHeader> {
 
   @override
   Widget build(BuildContext context) {
-    return CommonCard(
-      enterAnimated: widget.enterAnimated,
-      key: widget.key,
-      radius: 18.ap,
-      type: CommonCardType.filled,
-      child: Padding(
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    return GestureDetector(
+      onTap: () => _handleChange(groupName),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isExpand
+                ? primaryColor.withValues(alpha: 0.20)
+                : const Color(0xFF1A1A1A),
+            width: 1,
+          ),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -491,7 +521,12 @@ class _ListHeaderState extends State<ListHeader> {
                       children: [
                         EmojiText(
                           groupName,
-                          style: context.textTheme.titleMedium,
+                          style: const TextStyle(
+                            fontFamily: 'SpaceGrotesk',
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white70,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Flexible(
@@ -503,7 +538,11 @@ class _ListHeaderState extends State<ListHeader> {
                             children: [
                               Text(
                                 groupType,
-                                style: context.textTheme.labelMedium?.toLight,
+                                style: const TextStyle(
+                                  fontFamily: 'SpaceGrotesk',
+                                  fontSize: 12,
+                                  color: Colors.white30,
+                                ),
                               ),
                               Flexible(
                                 flex: 1,
@@ -529,10 +568,11 @@ class _ListHeaderState extends State<ListHeader> {
                                             child: EmojiText(
                                               overflow: TextOverflow.ellipsis,
                                               ' · $proxyName',
-                                              style: context
-                                                  .textTheme
-                                                  .labelMedium
-                                                  ?.toLight,
+                                              style: const TextStyle(
+                                                fontFamily: 'SpaceGrotesk',
+                                                fontSize: 12,
+                                                color: Colors.white30,
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -556,50 +596,53 @@ class _ListHeaderState extends State<ListHeader> {
                 if (isExpand) ...[
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.all(2),
+                    padding: const EdgeInsets.all(2),
                     onPressed: () {
                       widget.onScrollToSelected(groupName);
                     },
-                    style: ButtonStyle(
+                    style: const ButtonStyle(
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    iconSize: 19,
-                    icon: const Icon(Icons.adjust),
+                    iconSize: 18,
+                    icon: const Icon(Icons.adjust, color: Colors.white30),
                   ),
                   const SizedBox(width: 2),
                   IconButton(
-                    iconSize: 20,
+                    iconSize: 18,
                     visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.all(2),
+                    padding: const EdgeInsets.all(2),
                     onPressed: _delayTest,
-                    style: ButtonStyle(
+                    style: const ButtonStyle(
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    icon: const Icon(Icons.network_ping),
+                    icon: const Icon(Icons.network_ping, color: Colors.white30),
                   ),
                   const SizedBox(width: 6),
                 ] else
-                  SizedBox(width: 6),
-                IconButton.filledTonal(
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.all(2),
-                  iconSize: 24,
-                  style: ButtonStyle(
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  const SizedBox(width: 6),
+                Container(
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  onPressed: () {
-                    _handleChange(groupName);
-                  },
-                  icon: CommonExpandIcon(expand: isExpand),
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(2),
+                    iconSize: 22,
+                    style: const ButtonStyle(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () {
+                      _handleChange(groupName);
+                    },
+                    icon: CommonExpandIcon(expand: isExpand),
+                  ),
                 ),
               ],
             ),
           ],
         ),
       ),
-      onPressed: () {
-        _handleChange(groupName);
-      },
     );
   }
 }

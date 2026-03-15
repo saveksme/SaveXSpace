@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/enum/enum.dart';
-import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/models/common.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/widgets/widgets.dart';
@@ -194,66 +193,86 @@ class ProxiesTabViewState extends ConsumerState<ProxiesTabView>
               return Stack(
                 alignment: AlignmentDirectional.centerStart,
                 children: [
-                  TabBar(
-                    controller: _tabController,
-                    padding: EdgeInsets.only(
-                      left: 16,
-                      right: 16 + (value ? 16 : 0),
-                    ),
-                    dividerColor: Colors.transparent,
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    overlayColor: const WidgetStatePropertyAll(
-                      Colors.transparent,
-                    ),
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    indicator: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: context.colorScheme.primary.withValues(alpha: 0.12),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF111111),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: context.colorScheme.primary.withValues(alpha: 0.25),
+                        color: const Color(0xFF1A1A1A),
                         width: 1,
                       ),
                     ),
-                    labelColor: context.colorScheme.primary,
-                    unselectedLabelColor: context.colorScheme.onSurface.withValues(alpha: 0.4),
-                    labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3),
-                    unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
-                    tabs: [
-                      for (final group in groups)
-                        Tab(
-                          height: 38,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: Builder(
-                              builder: (context) {
-                                final displayName = group.name == GroupName.GLOBAL.name
-                                    ? appLocalizations.global
-                                    : group.name;
-                                return EmojiText(
-                                  displayName,
-                                  style: DefaultTextStyle.of(context).style,
-                                );
-                              },
+                    padding: const EdgeInsets.all(4),
+                    child: TabBar(
+                      controller: _tabController,
+                      padding: EdgeInsets.only(
+                        right: value ? 16 : 0,
+                      ),
+                      dividerColor: Colors.transparent,
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      overlayColor: const WidgetStatePropertyAll(
+                        Colors.transparent,
+                      ),
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      indicator: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        color: context.colorScheme.primary.withValues(alpha: 0.15),
+                        border: Border.all(
+                          color: context.colorScheme.primary.withValues(alpha: 0.30),
+                          width: 1,
+                        ),
+                      ),
+                      labelColor: context.colorScheme.primary,
+                      unselectedLabelColor: Colors.white38,
+                      labelStyle: const TextStyle(
+                        fontFamily: 'SpaceGrotesk',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                      unselectedLabelStyle: const TextStyle(
+                        fontFamily: 'SpaceGrotesk',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      tabs: [
+                        for (final group in groups)
+                          Tab(
+                            height: 34,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              child: Builder(
+                                builder: (context) {
+                                  final displayName = group.name == GroupName.GLOBAL.name
+                                      ? appLocalizations.global
+                                      : group.name;
+                                  return EmojiText(
+                                    displayName,
+                                    style: DefaultTextStyle.of(context).style,
+                                  );
+                                },
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                   if (value) Positioned(right: 0, child: child!),
                 ],
               );
             },
             child: Container(
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    context.colorScheme.surface.opacity10,
-                    context.colorScheme.surface,
+                    Color(0x00111111),
+                    Color(0xFF111111),
                   ],
-                  stops: const [0.0, 0.1],
+                  stops: [0.0, 0.3],
                 ),
               ),
               child: _buildMoreButton(),
@@ -376,6 +395,7 @@ class _ProxyGroupViewState extends ConsumerState<ProxyGroupView> {
             type: widget.cardType,
             proxy: proxy,
             groupName: group.name,
+            index: index,
           );
         },
       ),
@@ -428,6 +448,7 @@ class _DelayTestButtonState extends State<DelayTestButton>
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
     return AnimatedBuilder(
       animation: _controller.view,
       builder: (_, child) {
@@ -436,10 +457,35 @@ class _DelayTestButtonState extends State<DelayTestButton>
           child: ScaleTransition(scale: _animation, child: child),
         );
       },
-      child: CommonFloatingActionButton(
-        onPressed: _healthcheck,
-        label: appLocalizations.delayTest,
-        icon: const Icon(Icons.network_ping),
+      child: GestureDetector(
+        onTap: _healthcheck,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: primaryColor.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: primaryColor.withValues(alpha: 0.30),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.network_ping, size: 18, color: primaryColor),
+              const SizedBox(width: 8),
+              Text(
+                appLocalizations.delayTest,
+                style: TextStyle(
+                  fontFamily: 'SpaceGrotesk',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: primaryColor,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
