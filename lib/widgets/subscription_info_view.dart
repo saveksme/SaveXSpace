@@ -23,10 +23,13 @@ class SubscriptionInfoView extends StatelessWidget {
     final totalShow = total.traffic.show;
     final expireShow =
         subscriptionInfo?.expire != null && subscriptionInfo!.expire != 0
-        ? DateTime.fromMillisecondsSinceEpoch(
-            subscriptionInfo!.expire * 1000,
-          ).show
-        : appLocalizations.infiniteTime;
+        ? (() {
+            final date = DateTime.fromMillisecondsSinceEpoch(
+              subscriptionInfo!.expire * 1000,
+            );
+            return date.year >= 2099 ? 'Бесконечная' : date.show;
+          })()
+        : 'Бесконечная';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

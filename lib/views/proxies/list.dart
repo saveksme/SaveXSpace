@@ -13,6 +13,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'card.dart';
 import 'common.dart';
 
+const _kHeaderBg = Color(0xFF0A0A0A);
+const _kHeaderBorder = Color(0xFF1A1A1A);
+const _kTextPrimary = Color(0xDEFFFFFF);
+const _kTextSecondary = Color(0x59FFFFFF);
+
 typedef GroupNameProxiesMap = Map<String, List<Proxy>>;
 
 class ProxiesListView extends StatefulWidget {
@@ -346,38 +351,29 @@ class _ProxiesListViewState extends State<ProxiesListView> {
                         children: [
                           Positioned(
                             top: -headerState.offset,
-                            child: Column(
-                              children: [
-                                Container(
-                                  width: container.maxWidth,
-                                  color: Colors.black,
-                                  padding: const EdgeInsets.only(
-                                    top: 16,
-                                    left: 16,
-                                    right: 16,
-                                    bottom: 0,
-                                  ),
-                                  child: _buildHeader(
-                                    ref,
-                                    group: state.groups[index],
-                                    currentUnfoldSet: state.currentUnfoldSet,
+                            child: Container(
+                              width: container.maxWidth,
+                              decoration: const BoxDecoration(
+                                color: Colors.black,
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: _kHeaderBorder,
+                                    width: 0.5,
                                   ),
                                 ),
-                                Container(
-                                  width: container.maxWidth,
-                                  height: 16,
-                                  decoration: const BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.black,
-                                        Color(0x00000000),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
+                              ),
+                              padding: const EdgeInsets.only(
+                                top: 16,
+                                left: 16,
+                                right: 16,
+                                bottom: 0,
+                              ),
+                              child: _buildHeader(
+                                ref,
+                                group: state.groups[index],
+                                currentUnfoldSet:
+                                    state.currentUnfoldSet,
+                              ),
                             ),
                           ),
                         ],
@@ -447,9 +443,8 @@ class _ListHeaderState extends State<ListHeader> {
         return switch (iconStyle) {
           ProxiesIconStyle.standard => LayoutBuilder(
             builder: (_, constraints) {
-              final primaryColor = Theme.of(context).colorScheme.primary;
               return Container(
-                margin: const EdgeInsets.only(right: 16),
+                margin: const EdgeInsets.only(right: 12),
                 child: AspectRatio(
                   aspectRatio: 1,
                   child: Container(
@@ -457,11 +452,12 @@ class _ListHeaderState extends State<ListHeader> {
                     width: constraints.maxWidth,
                     alignment: Alignment.center,
                     padding: EdgeInsets.all(6.ap),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: primaryColor.withValues(alpha: 0.10),
-                    ),
                     clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: _kHeaderBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _kHeaderBorder, width: 0.5),
+                    ),
                     child: CommonTargetIcon(
                       src: icon,
                       size: constraints.maxHeight - 12.ap,
@@ -472,7 +468,7 @@ class _ListHeaderState extends State<ListHeader> {
             },
           ),
           ProxiesIconStyle.icon => Container(
-            margin: const EdgeInsets.only(right: 16),
+            margin: const EdgeInsets.only(right: 12),
             child: LayoutBuilder(
               builder: (_, constraints) {
                 return CommonTargetIcon(
@@ -493,20 +489,16 @@ class _ListHeaderState extends State<ListHeader> {
     final primaryColor = Theme.of(context).colorScheme.primary;
     return GestureDetector(
       onTap: () => _handleChange(groupName),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
+      child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF111111),
-          borderRadius: BorderRadius.circular(16),
+          color: _kHeaderBg,
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isExpand
-                ? primaryColor.withValues(alpha: 0.20)
-                : const Color(0xFF1A1A1A),
+            color: isExpand ? primaryColor.withValues(alpha: 0.2) : _kHeaderBorder,
             width: 1,
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -521,14 +513,13 @@ class _ListHeaderState extends State<ListHeader> {
                       children: [
                         EmojiText(
                           groupName,
-                          style: const TextStyle(
-                            fontFamily: 'SpaceGrotesk',
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white70,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: isExpand ? _kTextPrimary : const Color(0x99FFFFFF),
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         Flexible(
                           flex: 1,
                           child: Row(
@@ -539,9 +530,8 @@ class _ListHeaderState extends State<ListHeader> {
                               Text(
                                 groupType,
                                 style: const TextStyle(
-                                  fontFamily: 'SpaceGrotesk',
                                   fontSize: 12,
-                                  color: Colors.white30,
+                                  color: _kTextSecondary,
                                 ),
                               ),
                               Flexible(
@@ -566,12 +556,12 @@ class _ListHeaderState extends State<ListHeader> {
                                           Flexible(
                                             flex: 1,
                                             child: EmojiText(
-                                              overflow: TextOverflow.ellipsis,
+                                              overflow:
+                                                  TextOverflow.ellipsis,
                                               ' · $proxyName',
                                               style: const TextStyle(
-                                                fontFamily: 'SpaceGrotesk',
                                                 fontSize: 12,
-                                                color: Colors.white30,
+                                                color: _kTextSecondary,
                                               ),
                                             ),
                                           ),
@@ -603,40 +593,37 @@ class _ListHeaderState extends State<ListHeader> {
                     style: const ButtonStyle(
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    iconSize: 18,
-                    icon: const Icon(Icons.adjust, color: Colors.white30),
+                    iconSize: 16,
+                    icon: Icon(Icons.adjust, color: primaryColor.withValues(alpha: 0.5)),
                   ),
                   const SizedBox(width: 2),
                   IconButton(
-                    iconSize: 18,
+                    iconSize: 16,
                     visualDensity: VisualDensity.compact,
                     padding: const EdgeInsets.all(2),
                     onPressed: _delayTest,
                     style: const ButtonStyle(
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    icon: const Icon(Icons.network_ping, color: Colors.white30),
-                  ),
-                  const SizedBox(width: 6),
-                ] else
-                  const SizedBox(width: 6),
-                Container(
-                  decoration: BoxDecoration(
-                    color: primaryColor.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(2),
-                    iconSize: 22,
-                    style: const ButtonStyle(
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    icon: Icon(
+                      Icons.network_ping,
+                      color: primaryColor.withValues(alpha: 0.5),
                     ),
-                    onPressed: () {
-                      _handleChange(groupName);
-                    },
-                    icon: CommonExpandIcon(expand: isExpand),
                   ),
+                  const SizedBox(width: 4),
+                ] else
+                  const SizedBox(width: 4),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(2),
+                  iconSize: 20,
+                  style: const ButtonStyle(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () {
+                    _handleChange(groupName);
+                  },
+                  icon: CommonExpandIcon(expand: isExpand),
                 ),
               ],
             ),

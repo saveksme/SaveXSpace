@@ -393,17 +393,33 @@ class _ActiveSubscriptionCard extends StatelessWidget {
                     label: sub.download.traffic.show,
                     color: primaryColor,
                   ),
-                  const Spacer(),
-                  if (sub.expire > 0)
-                    _StatChip(
-                      icon: Icons.schedule_rounded,
-                      label: _formatExpiry(sub.expire),
-                      color: _expiryColor(sub.expire),
-                    ),
                 ],
               ),
             ),
           ],
+
+          // Expiry — inline with last update
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: Row(
+              children: [
+                Icon(
+                  _isInfinite(sub) ? Icons.all_inclusive_rounded : Icons.timer_outlined,
+                  size: 13,
+                  color: _expireDisplayColor(sub, primaryColor),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _expireDisplayText(sub),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: _expireDisplayColor(sub, primaryColor),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
           // Last update
           if (profile.lastUpdateDate != null)
@@ -457,6 +473,7 @@ class _ActiveSubscriptionCard extends StatelessWidget {
     if (sub == null || sub.total == 0) return 'Активна';
     if (sub.expire > 0) {
       final date = DateTime.fromMillisecondsSinceEpoch(sub.expire * 1000);
+      if (date.year >= 2099) return 'Активна';
       if (date.isBefore(DateTime.now())) return 'Истекла';
     }
     return 'Активна';
@@ -475,6 +492,7 @@ class _ActiveSubscriptionCard extends StatelessWidget {
 
   String _formatExpiry(int ts) {
     final date = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
+    if (date.year >= 2099) return 'Бесконечная';
     final diff = date.difference(DateTime.now());
     if (diff.isNegative) return 'Истекла';
     if (diff.inDays > 30) return '${diff.inDays} дн';
@@ -485,10 +503,26 @@ class _ActiveSubscriptionCard extends StatelessWidget {
 
   Color _expiryColor(int ts) {
     final date = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
+    if (date.year >= 2099) return Colors.white38;
     final diff = date.difference(DateTime.now());
     if (diff.isNegative) return Colors.red;
     if (diff.inDays < 3) return Colors.amber;
     return Colors.white38;
+  }
+
+  bool _isInfinite(SubscriptionInfo? sub) {
+    if (sub == null || sub.expire == 0) return true;
+    return DateTime.fromMillisecondsSinceEpoch(sub.expire * 1000).year >= 2099;
+  }
+
+  String _expireDisplayText(SubscriptionInfo? sub) {
+    if (_isInfinite(sub)) return 'Бесконечная';
+    return _formatExpiry(sub!.expire);
+  }
+
+  Color _expireDisplayColor(SubscriptionInfo? sub, Color primary) {
+    if (_isInfinite(sub)) return Colors.white24;
+    return _expiryColor(sub!.expire);
   }
 
   String _formatDate(DateTime date) {

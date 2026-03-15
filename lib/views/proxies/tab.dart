@@ -68,11 +68,17 @@ class ProxiesTabViewState extends ConsumerState<ProxiesTabView>
     return Consumer(
       builder: (_, ref, _) {
         final isMobileView = ref.watch(isMobileViewProvider);
-        return IconButton(
-          onPressed: _showMoreMenu,
-          icon: isMobileView
-              ? const Icon(Icons.expand_more)
-              : const Icon(Icons.chevron_right),
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: IconButton(
+            onPressed: _showMoreMenu,
+            icon: isMobileView
+                ? const Icon(Icons.expand_more, size: 18, color: Color(0x59FFFFFF))
+                : const Icon(Icons.chevron_right, size: 18, color: Color(0x59FFFFFF)),
+          ),
         );
       },
     );
@@ -177,10 +183,12 @@ class ProxiesTabViewState extends ConsumerState<ProxiesTabView>
       );
     }
     _keyMap = {};
+    final primaryColor = Theme.of(context).colorScheme.primary;
     return Column(
       mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Tab bar
         NotificationListener<ScrollMetricsNotification>(
           onNotification: (scrollNotification) {
             _hasMoreButtonNotifier.value =
@@ -194,91 +202,87 @@ class ProxiesTabViewState extends ConsumerState<ProxiesTabView>
                 alignment: AlignmentDirectional.centerStart,
                 children: [
                   Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF111111),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: const Color(0xFF1A1A1A),
-                        width: 1,
-                      ),
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: TabBar(
-                      controller: _tabController,
-                      padding: EdgeInsets.only(
-                        right: value ? 16 : 0,
-                      ),
-                      dividerColor: Colors.transparent,
-                      isScrollable: true,
-                      tabAlignment: TabAlignment.start,
-                      overlayColor: const WidgetStatePropertyAll(
-                        Colors.transparent,
-                      ),
-                      indicatorSize: TabBarIndicatorSize.tab,
-                      indicator: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        color: context.colorScheme.primary.withValues(alpha: 0.15),
-                        border: Border.all(
-                          color: context.colorScheme.primary.withValues(alpha: 0.30),
-                          width: 1,
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Color(0x0FFFFFFF),
+                          width: 0.5,
                         ),
                       ),
-                      labelColor: context.colorScheme.primary,
-                      unselectedLabelColor: Colors.white38,
-                      labelStyle: const TextStyle(
-                        fontFamily: 'SpaceGrotesk',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
-                      unselectedLabelStyle: const TextStyle(
-                        fontFamily: 'SpaceGrotesk',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w400,
-                      ),
-                      tabs: [
-                        for (final group in groups)
-                          Tab(
-                            height: 34,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6),
-                              child: Builder(
-                                builder: (context) {
-                                  final displayName = group.name == GroupName.GLOBAL.name
-                                      ? appLocalizations.global
-                                      : group.name;
-                                  return EmojiText(
-                                    displayName,
-                                    style: DefaultTextStyle.of(context).style,
-                                  );
-                                },
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TabBar(
+                        controller: _tabController,
+                        padding: EdgeInsets.only(
+                          right: value ? 32 : 0,
+                        ),
+                        dividerColor: Colors.transparent,
+                        isScrollable: true,
+                        tabAlignment: TabAlignment.start,
+                        overlayColor: const WidgetStatePropertyAll(
+                          Colors.transparent,
+                        ),
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        indicator: UnderlineTabIndicator(
+                          borderSide: BorderSide(
+                            color: primaryColor,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                        labelColor: primaryColor,
+                        unselectedLabelColor: const Color(0x59FFFFFF),
+                        labelStyle: const TextStyle(
+                          fontFamily: 'SpaceGrotesk',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.2,
+                        ),
+                        unselectedLabelStyle: const TextStyle(
+                          fontFamily: 'SpaceGrotesk',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: -0.2,
+                        ),
+                        tabs: [
+                          for (final group in groups)
+                            Tab(
+                              height: 40,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4),
+                                child: Builder(
+                                  builder: (context) {
+                                    final displayName =
+                                        group.name == GroupName.GLOBAL.name
+                                            ? appLocalizations.global
+                                            : group.name;
+                                    return EmojiText(
+                                      displayName,
+                                      style: DefaultTextStyle.of(context)
+                                          .style,
+                                    );
+                                  },
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                  if (value) Positioned(right: 0, child: child!),
+                  if (value)
+                    Positioned(
+                      right: 0,
+                      child: child!,
+                    ),
                 ],
               );
             },
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Color(0x00111111),
-                    Color(0xFF111111),
-                  ],
-                  stops: [0.0, 0.3],
-                ),
-              ),
-              child: _buildMoreButton(),
-            ),
+            child: _buildMoreButton(),
           ),
         ),
+        // Content
         Expanded(
           child: TabBarView(
             controller: _tabController,
@@ -382,8 +386,8 @@ class _ProxyGroupViewState extends ConsumerState<ProxyGroupView> {
         ),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: widget.columns,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
           mainAxisExtent: getItemHeight(widget.cardType),
         ),
         itemCount: currentProxies.length,
@@ -460,26 +464,25 @@ class _DelayTestButtonState extends State<DelayTestButton>
       child: GestureDetector(
         onTap: _healthcheck,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            color: primaryColor.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(16),
+            color: primaryColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: primaryColor.withValues(alpha: 0.30),
+              color: primaryColor.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.network_ping, size: 18, color: primaryColor),
+              Icon(Icons.network_ping, size: 16, color: primaryColor),
               const SizedBox(width: 8),
               Text(
                 appLocalizations.delayTest,
                 style: TextStyle(
-                  fontFamily: 'SpaceGrotesk',
                   fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                   color: primaryColor,
                 ),
               ),

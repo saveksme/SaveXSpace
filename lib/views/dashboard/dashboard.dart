@@ -8,6 +8,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/database.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -199,12 +200,20 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                         primaryColor: primaryColor,
                       ),
                     const SizedBox(height: 16),
+                    // Subscription card under mode selector
+                    _SubscriptionCard(primaryColor: primaryColor),
+                    const SizedBox(height: 12),
                     if (isStart) ...[
                       _SpeedCard(primaryColor: primaryColor),
+                      const SizedBox(height: 12),
+                      _TotalTrafficCard(primaryColor: primaryColor),
+                      const SizedBox(height: 12),
+                      _NetworkInfoRow(primaryColor: primaryColor),
+                      const SizedBox(height: 12),
+                      _ActiveProxyCard(primaryColor: primaryColor),
                     ],
                     const SizedBox(height: 12),
                     _AnnounceBanner(primaryColor: primaryColor),
-                    _SubscriptionCard(primaryColor: primaryColor),
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -722,39 +731,70 @@ class _SubscriptionCard extends ConsumerWidget {
                     style: const TextStyle(fontSize: 12, color: Colors.white38),
                   ),
                 ),
-                if (sub.expire > 0)
-                  Text(
-                    _formatExpiry(sub.expire),
-                    style: TextStyle(fontSize: 11, color: _expiryColor(sub.expire)),
-                  ),
               ],
             ),
           ],
-          if (profile.lastUpdateDate != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Обновлено: ${_formatDate(profile.lastUpdateDate!)}',
-              style: const TextStyle(fontSize: 10, color: Colors.white24),
-            ),
-          ],
+          const SizedBox(height: 10),
+          // Expiry + last update in one row
+          Row(
+            children: [
+              Icon(
+                _isInfinite(sub) ? Icons.all_inclusive_rounded : Icons.timer_outlined,
+                size: 11,
+                color: _isInfinite(sub)
+                    ? Colors.white24
+                    : _expiryColor(sub?.expire ?? 0),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _isInfinite(sub) ? 'Бесконечная' : _formatExpiry(sub!.expire),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: _isInfinite(sub)
+                      ? Colors.white24
+                      : _expiryColor(sub?.expire ?? 0),
+                ),
+              ),
+              if (profile.lastUpdateDate != null) ...[
+                Text(
+                  '  ·  ',
+                  style: const TextStyle(fontSize: 10, color: Colors.white12),
+                ),
+                Text(
+                  'Обновлено: ${_formatDate(profile.lastUpdateDate!)}',
+                  style: const TextStyle(fontSize: 10, color: Colors.white24),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );
   }
 
+  bool _isInfinite(dynamic sub) {
+    if (sub == null) return true;
+    final expire = sub.expire ?? 0;
+    if (expire == 0) return true;
+    return DateTime.fromMillisecondsSinceEpoch(expire * 1000).year >= 2099;
+  }
+
   String _formatExpiry(int expireTimestamp) {
     final date = DateTime.fromMillisecondsSinceEpoch(expireTimestamp * 1000);
+    if (date.year >= 2099) return 'Бесконечная';
     final now = DateTime.now();
     final diff = date.difference(now);
-    if (diff.isNegative) return 'Expired';
-    if (diff.inDays > 30) return '${diff.inDays} d';
-    if (diff.inDays > 0) return '${diff.inDays} d';
-    if (diff.inHours > 0) return '${diff.inHours} h';
-    return '< 1h';
+    if (diff.isNegative) return 'Истекла';
+    if (diff.inDays > 30) return '${diff.inDays} дн';
+    if (diff.inDays > 0) return '${diff.inDays} дн';
+    if (diff.inHours > 0) return '${diff.inHours} ч';
+    return '< 1ч';
   }
 
   Color _expiryColor(int expireTimestamp) {
     final date = DateTime.fromMillisecondsSinceEpoch(expireTimestamp * 1000);
+    if (date.year >= 2099) return Colors.white30;
     final now = DateTime.now();
     final diff = date.difference(now);
     if (diff.isNegative) return Colors.red;
@@ -764,6 +804,215 @@ class _SubscriptionCard extends ConsumerWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+  }
+}
+
+// Total session traffic
+class _TotalTrafficCard extends ConsumerWidget {
+  final Color primaryColor;
+  const _TotalTrafficCard({required this.primaryColor});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final totalTraffic = ref.watch(totalTrafficProvider);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D0D0D),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF1A1A1A)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.data_usage_rounded, size: 16, color: primaryColor.withValues(alpha: 0.5)),
+          const SizedBox(width: 10),
+          Text(
+            'Всего',
+            style: const TextStyle(fontSize: 12, color: Colors.white38, fontWeight: FontWeight.w500),
+          ),
+          const Spacer(),
+          Text(
+            '↑ ${totalTraffic.up.traffic.show}',
+            style: const TextStyle(fontSize: 12, color: Colors.white54, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(width: 16),
+          Text(
+            '↓ ${totalTraffic.down.traffic.show}',
+            style: const TextStyle(fontSize: 12, color: Colors.white54, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Network info: connections count + local IP + TUN
+class _NetworkInfoRow extends ConsumerWidget {
+  final Color primaryColor;
+  const _NetworkInfoRow({required this.primaryColor});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final requests = ref.watch(requestsProvider);
+    final localIp = ref.watch(localIpProvider);
+    final tunEnabled = ref.watch(realTunEnableProvider);
+    final connectionsCount = requests.list.length;
+
+    return Row(
+      children: [
+        Expanded(
+          child: _InfoTile(
+            icon: Icons.device_hub_rounded,
+            label: '$connectionsCount',
+            subtitle: 'Соединения',
+            primaryColor: primaryColor,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _InfoTile(
+            icon: Icons.language_rounded,
+            label: localIp ?? '—',
+            subtitle: 'IP',
+            primaryColor: primaryColor,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _InfoTile(
+            icon: Icons.shield_outlined,
+            label: tunEnabled ? 'TUN' : 'Proxy',
+            subtitle: 'Режим',
+            primaryColor: primaryColor,
+            highlight: tunEnabled,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InfoTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color primaryColor;
+  final bool highlight;
+
+  const _InfoTile({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.primaryColor,
+    this.highlight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D0D0D),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: highlight
+              ? primaryColor.withValues(alpha: 0.2)
+              : const Color(0xFF1A1A1A),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 14, color: primaryColor.withValues(alpha: 0.4)),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: highlight ? primaryColor.withValues(alpha: 0.9) : Colors.white70,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 10, color: Colors.white24),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Active proxy card — shows current group + selected proxy, navigates to proxies on tap
+class _ActiveProxyCard extends ConsumerWidget {
+  final Color primaryColor;
+  const _ActiveProxyCard({required this.primaryColor});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(currentProfileProvider);
+    if (profile == null) return const SizedBox.shrink();
+
+    final currentGroupName = profile.currentGroupName ?? '';
+    final selectedMap = ref.watch(selectedMapProvider);
+    final selectedProxy = selectedMap[currentGroupName] ?? '';
+
+    if (currentGroupName.isEmpty) return const SizedBox.shrink();
+
+    return GestureDetector(
+      onTap: () => appController.toPage(PageLabel.proxies),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0D0D),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF1A1A1A)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.route_rounded, size: 18, color: primaryColor.withValues(alpha: 0.6)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  EmojiText(
+                    selectedProxy.isNotEmpty ? selectedProxy : '—',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white70,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  EmojiText(
+                    currentGroupName,
+                    style: const TextStyle(fontSize: 11, color: Colors.white24),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 18, color: Colors.white24),
+          ],
+        ),
+      ),
+    );
   }
 }
 
