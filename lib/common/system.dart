@@ -258,13 +258,18 @@ class Windows {
     final res = runas('cmd.exe', command);
 
     await Future.delayed(Duration(milliseconds: 300));
-    final retryStatus = await retry(
-      task: checkService,
-      maxAttempts: 5,
-      retryIf: (status) => status != WindowsHelperServiceStatus.running,
-      delay: Duration(seconds: 1),
-    );
-    return res && retryStatus == WindowsHelperServiceStatus.running;
+    try {
+      final retryStatus = await retry(
+        task: checkService,
+        maxAttempts: 5,
+        retryIf: (status) => status != WindowsHelperServiceStatus.running,
+        delay: Duration(seconds: 1),
+      );
+      return res && retryStatus == WindowsHelperServiceStatus.running;
+    } catch (e) {
+      commonPrint.log('Helper service retry failed: $e');
+      return false;
+    }
   }
 
   Future<bool> registerTask(String appName) async {

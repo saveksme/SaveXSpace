@@ -458,28 +458,34 @@ extension ProxiesControllerExt on AppController {
         _ref.read(groupsProvider.notifier).value = [];
         return;
       }
-      _ref.read(groupsProvider.notifier).value = await retry(
-        task: () async {
-          final sortType = _ref.read(
-            proxiesStyleSettingProvider.select((state) => state.sortType),
-          );
-          final delayMap = _ref.read(delayDataSourceProvider);
-          final testUrl = _ref.read(
-            appSettingProvider.select((state) => state.testUrl),
-          );
-          final selectedMap = _ref.read(
-            currentProfileProvider.select((state) => state?.selectedMap ?? {}),
-          );
-          return await coreController.getProxiesGroups(
-            selectedMap: selectedMap,
-            sortType: sortType,
-            delayMap: delayMap,
-            defaultTestUrl: testUrl,
-          );
-        },
-        maxAttempts: 5,
-        retryIf: (res) => res.isEmpty,
-      );
+      List<Group> groups = [];
+      try {
+        groups = await retry(
+          task: () async {
+            final sortType = _ref.read(
+              proxiesStyleSettingProvider.select((state) => state.sortType),
+            );
+            final delayMap = _ref.read(delayDataSourceProvider);
+            final testUrl = _ref.read(
+              appSettingProvider.select((state) => state.testUrl),
+            );
+            final selectedMap = _ref.read(
+              currentProfileProvider.select((state) => state?.selectedMap ?? {}),
+            );
+            return await coreController.getProxiesGroups(
+              selectedMap: selectedMap,
+              sortType: sortType,
+              delayMap: delayMap,
+              defaultTestUrl: testUrl,
+            );
+          },
+          maxAttempts: 5,
+          retryIf: (res) => res.isEmpty,
+        );
+      } catch (e) {
+        commonPrint.log('updateGroups: retry failed ($e), using empty groups');
+      }
+      _ref.read(groupsProvider.notifier).value = groups;
     } catch (e) {
       commonPrint.log('updateGroups error: $e');
       _ref.read(groupsProvider.notifier).value = [];
