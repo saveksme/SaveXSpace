@@ -767,25 +767,32 @@ extension SetupControllerExt on AppController {
   }
 
   Future<void> _setupConfig([VoidCallback? preloadInvoke]) async {
-    commonPrint.log('setup ===>');
+    commonPrint.log('[SETUP] _setupConfig START');
     var profile = _ref.read(currentProfileProvider);
+    commonPrint.log('[SETUP] currentProfile: id=${profile?.id}, label=${profile?.label}, url=${profile?.url != null ? "present" : "null"}');
     try {
       final nextProfile = await profile?.checkAndUpdateAndCopy();
+      commonPrint.log('[SETUP] checkAndUpdateAndCopy result: ${nextProfile != null ? "updated" : "no update needed"}');
       if (nextProfile != null) {
         profile = nextProfile;
         _ref.read(profilesProvider.notifier).put(nextProfile);
       }
     } catch (e) {
-      commonPrint.log('checkAndUpdateAndCopy error: $e');
+      commonPrint.log('[SETUP] checkAndUpdateAndCopy error: $e');
     }
     final patchConfig = _ref.read(patchClashConfigProvider);
+    commonPrint.log('[SETUP] TUN requested: ${patchConfig.tun.enable}');
     final res = await _requestAdmin(patchConfig.tun.enable);
+    commonPrint.log('[SETUP] _requestAdmin result: isError=${res.isError}');
     if (res.isError) {
+      commonPrint.log('[SETUP] _requestAdmin failed, returning early');
       return;
     }
     final realTunEnable = _ref.read(realTunEnableProvider);
+    commonPrint.log('[SETUP] realTunEnable: $realTunEnable');
     final realPatchConfig = patchConfig.copyWith.tun(enable: realTunEnable);
     final setupState = await _ref.read(setupStateProvider(profile?.id).future);
+    commonPrint.log('[SETUP] setupState profileId: ${setupState.profileId}');
     globalState.lastSetupState = setupState;
     if (system.isAndroid) {
       globalState.lastVpnState = _ref.read(vpnStateProvider);
@@ -795,65 +802,88 @@ extension SetupControllerExt on AppController {
       setupState: setupState,
       patchConfig: realPatchConfig,
     );
+    commonPrint.log('[SETUP] getProfile returned ${config.length} keys, tun in config: ${config.containsKey("tun")}');
     final configFilePath = await appPath.configFilePath;
     final yamlString = await encodeYamlTask(config);
+    commonPrint.log('[SETUP] config YAML length: ${yamlString.length} chars, writing to: $configFilePath');
     await File(configFilePath).safeWriteAsString(yamlString);
     final message = await coreController.setupConfig(
       setupState: setupState,
       params: setupParams,
       preloadInvoke: preloadInvoke,
     );
+    commonPrint.log('[SETUP] coreController.setupConfig message: "${message}"');
     if (message.isNotEmpty) {
+      commonPrint.log('[SETUP] THROWING setupConfig error: $message');
       throw message;
     }
+    commonPrint.log('[SETUP] _setupConfig SUCCESS');
     addCheckIp();
   }
 }
 
 extension CoreControllerExt on AppController {
   Future<void> _initCore() async {
+    commonPrint.log('[CORE] _initCore START');
     final isInit = await coreController.isInit;
     final version = _ref.read(versionProvider);
+    commonPrint.log('[CORE] isInit=$isInit, version=$version');
     if (!isInit) {
+      commonPrint.log('[CORE] calling coreController.init()');
       await coreController.init(version);
+      commonPrint.log('[CORE] coreController.init() DONE');
     } else {
+      commonPrint.log('[CORE] core already init, calling updateGroups()');
       await updateGroups();
+      commonPrint.log('[CORE] updateGroups() DONE');
     }
   }
 
   Future<void> _connectCore() async {
+    commonPrint.log('[CORE] _connectCore START');
     _ref.read(coreStatusProvider.notifier).value = CoreStatus.connecting;
     final result = await Future.wait([
       coreController.preload(),
       Future.delayed(Duration(milliseconds: 300)),
     ]);
     final String message = result[0];
+    commonPrint.log('[CORE] preload message: "$message"');
     if (message.isNotEmpty) {
+      commonPrint.log('[CORE] preload FAILED, setting disconnected');
       _ref.read(coreStatusProvider.notifier).value = CoreStatus.disconnected;
       if (_context.mounted) {
         _context.showNotifier(message);
       }
       return;
     }
+    commonPrint.log('[CORE] _connectCore SUCCESS, status=connected');
     _ref.read(coreStatusProvider.notifier).value = CoreStatus.connected;
   }
 
   Future<Result<bool>> _requestAdmin(bool enableTun) async {
+    commonPrint.log('[ADMIN] _requestAdmin enableTun=$enableTun');
     final realTunEnable = _ref.read(realTunEnableProvider);
+    commonPrint.log('[ADMIN] realTunEnable=$realTunEnable');
     if (enableTun != realTunEnable && realTunEnable == false) {
+      commonPrint.log('[ADMIN] requesting authorizeCore...');
       final code = await system.authorizeCore();
+      commonPrint.log('[ADMIN] authorizeCore result: $code');
       switch (code) {
         case AuthorizeCode.success:
+          commonPrint.log('[ADMIN] authorized, restarting core');
           await restartCore();
           return Result.error('');
         case AuthorizeCode.none:
+          commonPrint.log('[ADMIN] no authorization needed');
           break;
         case AuthorizeCode.error:
+          commonPrint.log('[ADMIN] authorization ERROR');
           enableTun = false;
           break;
       }
     }
     _ref.read(realTunEnableProvider.notifier).value = enableTun;
+    commonPrint.log('[ADMIN] final enableTun=$enableTun');
     return Result.success(enableTun);
   }
 

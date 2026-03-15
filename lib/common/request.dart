@@ -162,17 +162,27 @@ class Request {
 
   Future<bool> pingHelper() async {
     try {
+      commonPrint.log('[PING] pingHelper http://$localhost:$helperPort/ping');
       final response = await dio
           .get(
             'http://$localhost:$helperPort/ping',
             options: Options(responseType: ResponseType.plain),
           )
           .timeout(const Duration(milliseconds: 2000));
+      commonPrint.log('[PING] status=${response.statusCode}, data="${response.data}"');
       if (response.statusCode != HttpStatus.ok) {
+        commonPrint.log('[PING] bad status code, returning false');
         return false;
       }
-      return (response.data as String) == globalState.coreSHA256;
-    } catch (_) {
+      final helperToken = response.data as String;
+      final appSha = globalState.coreSHA256;
+      final match = helperToken == appSha;
+      commonPrint.log('[PING] helperToken=$helperToken');
+      commonPrint.log('[PING] appCoreSHA=$appSha');
+      commonPrint.log('[PING] SHA256 match=$match');
+      return match;
+    } catch (e) {
+      commonPrint.log('[PING] pingHelper ERROR: $e');
       return false;
     }
   }

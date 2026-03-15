@@ -71,11 +71,12 @@ Future<T> retry<T>({
   required bool Function(T res) retryIf,
   Duration delay = midDuration,
 }) async {
+  late T lastResult;
   int attempts = 0;
   while (attempts < maxAttempts) {
-    final res = await task();
-    if (!retryIf(res)) {
-      return res;
+    lastResult = await task();
+    if (!retryIf(lastResult)) {
+      return lastResult;
     }
     attempts++;
     if (attempts < maxAttempts) {
