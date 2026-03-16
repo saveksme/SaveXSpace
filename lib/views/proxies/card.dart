@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -9,13 +10,15 @@ import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-const _kCardBg = Color(0xFF0A0A0A);
-const _kCardBorder = Color(0xFF1A1A1A);
+// ── Minimal palette ──
+const _kCardBg = Color(0xFF0E0E11);
+const _kCardBorder = Color(0xFF1A1A1F);
+const _kSelectedBorder = Color(0xFF2A2A35);
 const _kTextPrimary = Color(0xDEFFFFFF);
-const _kTextSecondary = Color(0x59FFFFFF);
-const _kGoodDelay = Color(0xFF4ADE80);
-const _kMediumDelay = Color(0xFFFBBF24);
-const _kBadDelay = Color(0xFFEF4444);
+const _kTextMuted = Color(0x4DFFFFFF);
+const _kGood = Color(0xFF34D399);
+const _kMedium = Color(0xFFFBBF24);
+const _kBad = Color(0xFFF87171);
 
 class ProxyCard extends StatefulWidget {
   final String groupName;
@@ -39,36 +42,10 @@ class ProxyCard extends StatefulWidget {
   State<ProxyCard> createState() => _ProxyCardState();
 }
 
-class _ProxyCardState extends State<ProxyCard>
-    with SingleTickerProviderStateMixin {
+class _ProxyCardState extends State<ProxyCard> {
   bool _pressed = false;
-  late final AnimationController _selectController;
-  late final Animation<double> _selectBounce;
-  bool _wasSelected = false;
 
   Measure get measure => globalState.measure;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-    _selectBounce = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.94), weight: 20),
-      TweenSequenceItem(tween: Tween(begin: 0.94, end: 1.03), weight: 40),
-      TweenSequenceItem(tween: Tween(begin: 1.03, end: 1.0), weight: 40),
-    ]).animate(
-      CurvedAnimation(parent: _selectController, curve: Curves.easeOutCubic),
-    );
-  }
-
-  @override
-  void dispose() {
-    _selectController.dispose();
-    super.dispose();
-  }
 
   void _handleTestCurrentDelay() {
     proxyDelayTest(widget.proxy, widget.testUrl);
@@ -78,12 +55,15 @@ class _ProxyCardState extends State<ProxyCard>
     final isComputedSelected = widget.groupType.isComputedSelected;
     final isSelector = widget.groupType == GroupType.Selector;
     if (isComputedSelected || isSelector) {
-      final currentProxyName = ref.read(getProxyNameProvider(widget.groupName));
+      final currentProxyName =
+          ref.read(getProxyNameProvider(widget.groupName));
       final nextProxyName = switch (isComputedSelected) {
-        true => currentProxyName == widget.proxy.name ? '' : widget.proxy.name,
+        true =>
+          currentProxyName == widget.proxy.name ? '' : widget.proxy.name,
         false => widget.proxy.name,
       };
-      appController.updateCurrentSelectedMap(widget.groupName, nextProxyName);
+      appController.updateCurrentSelectedMap(
+          widget.groupName, nextProxyName);
       appController.changeProxyDebounce(widget.groupName, nextProxyName);
       return;
     }
@@ -94,115 +74,89 @@ class _ProxyCardState extends State<ProxyCard>
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return _StaggeredFadeSlide(
-      index: widget.index,
-      child: Consumer(
-        builder: (context, ref, _) {
-          final selectedProxyName = ref.watch(
-            getSelectedProxyNameProvider(widget.groupName),
-          );
-          final isSelected = selectedProxyName == widget.proxy.name;
+    return Consumer(
+      builder: (context, ref, _) {
+        final selectedProxyName = ref.watch(
+          getSelectedProxyNameProvider(widget.groupName),
+        );
+        final isSelected = selectedProxyName == widget.proxy.name;
 
-          // Trigger bounce animation when this card becomes selected
-          if (isSelected && !_wasSelected) {
-            _selectController.forward(from: 0.0);
-          }
-          _wasSelected = isSelected;
-
-          return GestureDetector(
-            onTap: () => _changeProxy(ref),
-            onTapDown: (_) => setState(() => _pressed = true),
-            onTapUp: (_) => setState(() => _pressed = false),
-            onTapCancel: () => setState(() => _pressed = false),
-            child: AnimatedBuilder(
-              animation: _selectBounce,
-              builder: (context, child) {
-                final bounceScale = _selectController.isAnimating
-                    ? _selectBounce.value
-                    : 1.0;
-                final pressScale = _pressed ? 0.96 : 1.0;
-                return Transform.scale(
-                  scale: bounceScale * pressScale,
-                  child: child,
-                );
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
+        return GestureDetector(
+          onTap: () => _changeProxy(ref),
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          child: AnimatedScale(
+            scale: _pressed ? 0.97 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? primaryColor.withValues(alpha: 0.06)
+                    : _kCardBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
                   color: isSelected
-                      ? primaryColor.withValues(alpha: 0.08)
-                      : _kCardBg,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isSelected
-                        ? primaryColor.withValues(alpha: 0.35)
-                        : _kCardBorder,
-                    width: isSelected ? 1.5 : 1,
-                  ),
-                  boxShadow: const [],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Name + active dot
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildProxyName(context, isSelected, primaryColor),
-                        ),
-                        if (widget.groupType.isComputedSelected)
-                          _ActiveDot(
-                            groupName: widget.groupName,
-                            proxy: widget.proxy,
-                          ),
-                      ],
-                    ),
-                    if (widget.type == ProxyCardType.expand) ...[
-                      const SizedBox(height: 3),
-                      _ProxyDesc(proxy: widget.proxy),
-                    ],
-                    const Spacer(),
-                    // Bottom: type + delay
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            widget.proxy.type,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: isSelected
-                                  ? primaryColor.withValues(alpha: 0.5)
-                                  : _kTextSecondary,
-                            ),
-                          ),
-                        ),
-                        _DelayText(
-                          proxy: widget.proxy,
-                          testUrl: widget.testUrl,
-                          onTest: _handleTestCurrentDelay,
-                        ),
-                      ],
-                    ),
-                  ],
+                      ? primaryColor.withValues(alpha: 0.35)
+                      : _kCardBorder,
+                  width: 1,
                 ),
               ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Row 1: name + delay
+                  Row(
+                    children: [
+                      // Active indicator
+                      if (widget.groupType.isComputedSelected)
+                        _ActiveIndicator(
+                          groupName: widget.groupName,
+                          proxy: widget.proxy,
+                          primaryColor: primaryColor,
+                        ),
+                      // Name
+                      Expanded(
+                        child: _buildName(isSelected, primaryColor),
+                      ),
+                      const SizedBox(width: 8),
+                      // Delay
+                      _DelayText(
+                        proxy: widget.proxy,
+                        testUrl: widget.testUrl,
+                        onTest: _handleTestCurrentDelay,
+                      ),
+                    ],
+                  ),
+                  if (widget.type == ProxyCardType.expand) ...[
+                    const SizedBox(height: 2),
+                    _ProxyDesc(proxy: widget.proxy),
+                  ],
+                  const Spacer(),
+                  // Row 2: protocol type
+                  Text(
+                    widget.proxy.type,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: _kTextMuted,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildProxyName(
-    BuildContext context,
-    bool isSelected,
-    Color primaryColor,
-  ) {
+  Widget _buildName(bool isSelected, Color primaryColor) {
     final maxLines = widget.type == ProxyCardType.min ? 1 : 2;
     return SizedBox(
       height: measure.bodyMediumHeight * maxLines,
@@ -220,64 +174,7 @@ class _ProxyCardState extends State<ProxyCard>
   }
 }
 
-/// Staggered entrance: fade + subtle slide up
-class _StaggeredFadeSlide extends StatefulWidget {
-  final int index;
-  final Widget child;
-
-  const _StaggeredFadeSlide({required this.index, required this.child});
-
-  @override
-  State<_StaggeredFadeSlide> createState() => _StaggeredFadeSlideState();
-}
-
-class _StaggeredFadeSlideState extends State<_StaggeredFadeSlide>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _opacity;
-  late final Animation<Offset> _offset;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _opacity = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-    _offset = Tween<Offset>(
-      begin: const Offset(0, 0.06),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
-    final delay = Duration(milliseconds: (widget.index * 25).clamp(0, 250));
-    Future.delayed(delay, () {
-      if (mounted) _controller.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacity,
-      child: SlideTransition(
-        position: _offset,
-        child: widget.child,
-      ),
-    );
-  }
-}
-
-/// Delay chip with animated appearance
+/// Delay text with blur reveal animation when value appears
 class _DelayText extends StatefulWidget {
   final Proxy proxy;
   final String? testUrl;
@@ -295,25 +192,24 @@ class _DelayText extends StatefulWidget {
 
 class _DelayTextState extends State<_DelayText>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _animController;
-  late final Animation<double> _scaleAnim;
-  late final Animation<double> _fadeAnim;
-  int? _previousDelay;
+  late AnimationController _animController;
+  int? _lastDelay;
+
+  static Color _color(int delay) {
+    if (delay < 0) return _kBad;
+    if (delay < 300) return _kGood;
+    if (delay < 600) return _kMedium;
+    return _kBad;
+  }
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(
-      duration: const Duration(milliseconds: 400),
       vsync: this,
+      duration: const Duration(milliseconds: 400),
+      value: 1.0,
     );
-    _scaleAnim = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.elasticOut),
-    );
-    _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeOut),
-    );
-    _animController.value = 1.0;
   }
 
   @override
@@ -322,18 +218,12 @@ class _DelayTextState extends State<_DelayText>
     super.dispose();
   }
 
-  void _triggerAnimation(int? delay) {
-    if (_previousDelay == 0 && delay != null && delay != 0) {
+  void _onDelayChanged(int? delay) {
+    // Animate when transitioning from testing (0) to a real value
+    if (_lastDelay == 0 && delay != null && delay != 0) {
       _animController.forward(from: 0.0);
     }
-    _previousDelay = delay;
-  }
-
-  Color _getDelayColor(int delay) {
-    if (delay < 0) return _kBadDelay;
-    if (delay < 300) return _kGoodDelay;
-    if (delay < 600) return _kMediumDelay;
-    return _kBadDelay;
+    _lastDelay = delay;
   }
 
   @override
@@ -344,15 +234,14 @@ class _DelayTextState extends State<_DelayText>
           getDelayProvider(proxyName: widget.proxy.name, testUrl: widget.testUrl),
         );
 
-        _triggerAnimation(delay);
+        _onDelayChanged(delay);
 
         if (delay == null) {
           return GestureDetector(
             onTap: widget.onTest,
-            child: const Icon(
-              Icons.speed_rounded,
-              size: 14,
-              color: _kTextSecondary,
+            child: const Text(
+              '\u2014',
+              style: TextStyle(fontSize: 11, color: _kTextMuted),
             ),
           );
         }
@@ -363,25 +252,38 @@ class _DelayTextState extends State<_DelayText>
             height: 14,
             child: CircularProgressIndicator(
               strokeWidth: 1.5,
-              color: _kTextSecondary,
+              color: _kTextMuted,
             ),
           );
         }
 
-        final color = _getDelayColor(delay);
-        return ScaleTransition(
-          scale: _scaleAnim,
-          child: FadeTransition(
-            opacity: _fadeAnim,
-            child: GestureDetector(
-              onTap: widget.onTest,
-              child: Text(
-                delay > 0 ? '${delay}ms' : 'fail',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: color,
+        final color = _color(delay);
+        return AnimatedBuilder(
+          animation: _animController,
+          builder: (_, child) {
+            final t = Curves.easeOutCubic.transform(_animController.value);
+            final blur = (1.0 - t) * 6.0;
+            Widget result = child!;
+            if (blur > 0.3) {
+              result = ImageFiltered(
+                imageFilter: ImageFilter.blur(
+                  sigmaX: blur,
+                  sigmaY: blur,
+                  tileMode: TileMode.decal,
                 ),
+                child: result,
+              );
+            }
+            return Opacity(opacity: t.clamp(0.0, 1.0), child: result);
+          },
+          child: GestureDetector(
+            onTap: widget.onTest,
+            child: Text(
+              delay > 0 ? '${delay}ms' : '---',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
               ),
             ),
           ),
@@ -391,47 +293,24 @@ class _DelayTextState extends State<_DelayText>
   }
 }
 
-/// Active dot with gentle opacity pulse
-class _ActiveDot extends ConsumerStatefulWidget {
+/// Small active dot inline before name
+class _ActiveIndicator extends ConsumerWidget {
   final String groupName;
   final Proxy proxy;
+  final Color primaryColor;
 
-  const _ActiveDot({required this.groupName, required this.proxy});
-
-  @override
-  ConsumerState<_ActiveDot> createState() => _ActiveDotState();
-}
-
-class _ActiveDotState extends ConsumerState<_ActiveDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _opacity;
+  const _ActiveIndicator({
+    required this.groupName,
+    required this.proxy,
+    required this.primaryColor,
+  });
 
   @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat(reverse: true);
-    _opacity = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
-    final proxyName = ref.watch(getProxyNameProvider(widget.groupName));
-    if (proxyName != widget.proxy.name) return const SizedBox.shrink();
-    return FadeTransition(
-      opacity: _opacity,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final proxyName = ref.watch(getProxyNameProvider(groupName));
+    if (proxyName != proxy.name) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
       child: Container(
         width: 6,
         height: 6,
@@ -458,8 +337,8 @@ class _ProxyDesc extends ConsumerWidget {
         desc,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
-          fontSize: 11,
-          color: _kTextSecondary,
+          fontSize: 10,
+          color: _kTextMuted,
         ),
       ),
     );

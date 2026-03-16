@@ -7,7 +7,6 @@ import (
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
 	"github.com/metacubex/mihomo/common/observable"
-	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/mihomo/component/mmdb"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/component/updater"
@@ -224,12 +223,6 @@ func handleAsyncTestDelay(paramsString string, fn func(string)) {
 			return false, nil
 		}
 
-		expectedStatus, err := utils.NewUnsignedRanges[uint16]("")
-		if err != nil {
-			fn("")
-			return false, nil
-		}
-
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(params.Timeout))
 		defer cancel()
 
@@ -254,12 +247,29 @@ func handleAsyncTestDelay(paramsString string, fn func(string)) {
 		}
 		delayData.Url = testUrl
 
-		delay, err := proxy.URLTest(ctx, testUrl, expectedStatus)
-		if err != nil || delay == 0 {
+		// TCP ping: measure only TCP dial time (no HTTP/TLS overhead)
+		addr, err := adapter.UrlToMetadata(testUrl)
+		if err != nil {
 			delayData.Value = -1
 			data, _ := json.Marshal(delayData)
 			fn(string(data))
 			return false, nil
+		}
+
+		start := time.Now()
+		conn, err := proxy.DialContext(ctx, &addr)
+		if err != nil {
+			delayData.Value = -1
+			data, _ := json.Marshal(delayData)
+			fn(string(data))
+			return false, nil
+		}
+		elapsed := time.Since(start)
+		_ = conn.Close()
+
+		delay := uint16(elapsed / time.Millisecond)
+		if delay == 0 {
+			delay = 1
 		}
 
 		delayData.Value = int32(delay)

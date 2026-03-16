@@ -12,6 +12,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'card.dart';
 import 'common.dart';
 
+// Types to exclude from proxy lists (same filter as dashboard)
+const _kExcludeProxyTypes = {
+  'Direct', 'Reject', 'Selector', 'URLTest', 'Fallback',
+  'LoadBalance', 'Relay', 'Compatible',
+};
+
 typedef ProxyGroupViewKeyMap =
     Map<String, GlobalObjectKey<_ProxyGroupViewState>>;
 
@@ -69,15 +75,18 @@ class ProxiesTabViewState extends ConsumerState<ProxiesTabView>
       builder: (_, ref, _) {
         final isMobileView = ref.watch(isMobileViewProvider);
         return Container(
+          width: 28,
+          height: 28,
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.9),
+            color: const Color(0xFF111114),
             borderRadius: BorderRadius.circular(6),
           ),
           child: IconButton(
+            padding: EdgeInsets.zero,
             onPressed: _showMoreMenu,
             icon: isMobileView
-                ? const Icon(Icons.expand_more, size: 18, color: Color(0x59FFFFFF))
-                : const Icon(Icons.chevron_right, size: 18, color: Color(0x59FFFFFF)),
+                ? const Icon(Icons.expand_more, size: 16, color: Color(0x4DFFFFFF))
+                : const Icon(Icons.chevron_right, size: 16, color: Color(0x4DFFFFFF)),
           ),
         );
       },
@@ -188,7 +197,7 @@ class ProxiesTabViewState extends ConsumerState<ProxiesTabView>
       mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Tab bar
+        // Minimal tab bar
         NotificationListener<ScrollMetricsNotification>(
           onNotification: (scrollNotification) {
             _hasMoreButtonNotifier.value =
@@ -201,79 +210,65 @@ class ProxiesTabViewState extends ConsumerState<ProxiesTabView>
               return Stack(
                 alignment: AlignmentDirectional.centerStart,
                 children: [
-                  Container(
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Color(0x0FFFFFFF),
-                          width: 0.5,
-                        ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TabBar(
+                      controller: _tabController,
+                      padding: EdgeInsets.only(
+                        right: value ? 32 : 0,
                       ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: TabBar(
-                        controller: _tabController,
-                        padding: EdgeInsets.only(
-                          right: value ? 32 : 0,
+                      dividerColor: Colors.transparent,
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      overlayColor: const WidgetStatePropertyAll(
+                        Colors.transparent,
+                      ),
+                      indicatorSize: TabBarIndicatorSize.label,
+                      indicator: UnderlineTabIndicator(
+                        borderSide: BorderSide(
+                          color: primaryColor,
+                          width: 2,
                         ),
-                        dividerColor: Colors.transparent,
-                        isScrollable: true,
-                        tabAlignment: TabAlignment.start,
-                        overlayColor: const WidgetStatePropertyAll(
-                          Colors.transparent,
-                        ),
-                        indicatorSize: TabBarIndicatorSize.tab,
-                        indicator: UnderlineTabIndicator(
-                          borderSide: BorderSide(
-                            color: primaryColor,
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(1),
-                        ),
-                        labelColor: primaryColor,
-                        unselectedLabelColor: const Color(0x59FFFFFF),
-                        labelStyle: const TextStyle(
-                          fontFamily: 'SpaceGrotesk',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.2,
-                        ),
-                        unselectedLabelStyle: const TextStyle(
-                          fontFamily: 'SpaceGrotesk',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          letterSpacing: -0.2,
-                        ),
-                        tabs: [
-                          for (final group in groups)
-                            Tab(
-                              height: 40,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 4),
-                                child: Builder(
-                                  builder: (context) {
-                                    final displayName =
-                                        group.name == GroupName.GLOBAL.name
-                                            ? appLocalizations.global
-                                            : group.name;
-                                    return EmojiText(
-                                      displayName,
-                                      style: DefaultTextStyle.of(context)
-                                          .style,
-                                    );
-                                  },
-                                ),
-                              ),
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                      indicatorPadding: const EdgeInsets.only(bottom: 0),
+                      labelColor: Colors.white,
+                      unselectedLabelColor: const Color(0x40FFFFFF),
+                      labelStyle: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.2,
+                      ),
+                      unselectedLabelStyle: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: -0.2,
+                      ),
+                      tabs: [
+                        for (int i = 0; i < groups.length; i++)
+                          Tab(
+                            height: 36,
+                            child: Builder(
+                              builder: (context) {
+                                final group = groups[i];
+                                final displayName =
+                                    group.name == GroupName.GLOBAL.name
+                                        ? appLocalizations.global
+                                        : group.name;
+                                return EmojiText(
+                                  displayName,
+                                  style:
+                                      DefaultTextStyle.of(context).style,
+                                );
+                              },
                             ),
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
                   ),
                   if (value)
                     Positioned(
-                      right: 0,
+                      right: 4,
                       child: child!,
                     ),
                 ],
@@ -281,6 +276,12 @@ class ProxiesTabViewState extends ConsumerState<ProxiesTabView>
             },
             child: _buildMoreButton(),
           ),
+        ),
+        // Thin separator
+        Container(
+          height: 1,
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          color: const Color(0xFF1A1A1F),
         ),
         // Content
         Expanded(
@@ -370,7 +371,10 @@ class _ProxyGroupViewState extends ConsumerState<ProxyGroupView> {
   @override
   Widget build(BuildContext context) {
     final group = widget.group;
-    final proxies = group.all;
+    final proxies = group.all
+        .where((p) => !_kExcludeProxyTypes.contains(p.type) &&
+            p.name != 'DIRECT' && p.name != 'REJECT')
+        .toList();
     testUrl = group.testUrl;
     currentProxies = proxies;
     return CommonScrollBar(
@@ -379,15 +383,15 @@ class _ProxyGroupViewState extends ConsumerState<ProxyGroupView> {
         key: _getPageStorageKey(),
         controller: _controller,
         padding: const EdgeInsets.only(
-          top: 16,
+          top: 8,
           left: 16,
           right: 16,
           bottom: 96,
         ),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: widget.columns,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
           mainAxisExtent: getItemHeight(widget.cardType),
         ),
         itemCount: currentProxies.length,
@@ -419,16 +423,18 @@ class DelayTestButton extends StatefulWidget {
 class _DelayTestButtonState extends State<DelayTestButton>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _animation;
+
+  bool get _isTesting => _controller.isAnimating || _controller.value > 0;
 
   Future<void> _healthcheck() async {
-    if (_controller.isAnimating) {
+    if (_isTesting) {
       return;
     }
-    _controller.forward();
+    _controller.repeat();
     await widget.onClick();
     if (mounted) {
-      _controller.reverse();
+      _controller.stop();
+      _controller.reset();
     }
   }
 
@@ -437,10 +443,7 @@ class _DelayTestButtonState extends State<DelayTestButton>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _animation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOutBack),
+      duration: const Duration(milliseconds: 1000),
     );
   }
 
@@ -453,41 +456,42 @@ class _DelayTestButtonState extends State<DelayTestButton>
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    return AnimatedBuilder(
-      animation: _controller.view,
-      builder: (_, child) {
-        return FadeTransition(
-          opacity: _animation,
-          child: ScaleTransition(scale: _animation, child: child),
-        );
-      },
-      child: GestureDetector(
-        onTap: _healthcheck,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: primaryColor.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: primaryColor.withValues(alpha: 0.2),
-              width: 1,
-            ),
+    return GestureDetector(
+      onTap: _healthcheck,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: primaryColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: primaryColor.withValues(alpha: 0.2),
+            width: 1,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.network_ping, size: 16, color: primaryColor),
-              const SizedBox(width: 8),
-              Text(
-                appLocalizations.delayTest,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: primaryColor,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_isTesting)
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: primaryColor.withValues(alpha: 0.6),
                 ),
+              )
+            else
+              Icon(Icons.speed_rounded, size: 16, color: primaryColor),
+            const SizedBox(width: 8),
+            Text(
+              appLocalizations.delayTest,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: primaryColor,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

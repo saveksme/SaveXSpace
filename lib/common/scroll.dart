@@ -20,9 +20,7 @@ class BaseScrollBehavior extends MaterialScrollBehavior {
 
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) {
-    return const BouncingScrollPhysics(
-      decelerationRate: ScrollDecelerationRate.normal,
-    );
+    return const ClampingScrollPhysics();
   }
 
   @override
@@ -33,6 +31,7 @@ class BaseScrollBehavior extends MaterialScrollBehavior {
   ) {
     Widget result = child;
 
+    // Wrap with smooth wheel scroll on desktop
     if (system.isDesktop && details.controller != null) {
       result = _SmoothWheelScroll(
         controller: details.controller!,
@@ -63,8 +62,7 @@ class BaseScrollBehavior extends MaterialScrollBehavior {
 }
 
 /// Intercepts mouse wheel events and replaces the default instant jump
-/// with a smooth animated scroll. Works by scheduling a microtask
-/// that undoes the default jump and animates to the target instead.
+/// with smooth animated scroll by registering first with the resolver.
 class _SmoothWheelScroll extends StatefulWidget {
   final ScrollController controller;
   final Widget child;
@@ -89,6 +87,31 @@ class _SmoothWheelScrollState extends State<_SmoothWheelScroll> {
     super.dispose();
   }
 
+  void _handleSmooth(PointerScrollEvent event) {
+    final controller = widget.controller;
+    if (!controller.hasClients) return;
+    final pos = controller.position;
+
+    if (!_isWheelScrolling) {
+      _targetOffset = pos.pixels;
+      _isWheelScrolling = true;
+    }
+
+    _targetOffset = (_targetOffset + event.scrollDelta.dy)
+        .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+
+    pos.animateTo(
+      _targetOffset,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+    );
+
+    _resetTimer?.cancel();
+    _resetTimer = Timer(const Duration(milliseconds: 350), () {
+      _isWheelScrolling = false;
+    });
+  }
+
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is PointerScrollEvent) {
       final controller = widget.controller;
@@ -96,39 +119,14 @@ class _SmoothWheelScrollState extends State<_SmoothWheelScroll> {
       final pos = controller.position;
       if (pos.maxScrollExtent <= pos.minScrollExtent) return;
 
-      // Capture position before the default handler jumps
-      final beforeJump = pos.pixels;
-
-      if (!_isWheelScrolling) {
-        _targetOffset = beforeJump;
-        _isWheelScrolling = true;
-      }
-
-      _targetOffset = (_targetOffset + event.scrollDelta.dy)
-          .clamp(pos.minScrollExtent, pos.maxScrollExtent);
-
-      final target = _targetOffset;
-
-      // After the default handler's jumpTo, undo it and animate smoothly.
-      // scheduleMicrotask runs after dispatchEvent completes but before
-      // the next frame renders, so the user never sees the jump.
-      scheduleMicrotask(() {
-        if (!controller.hasClients) return;
-        final pos = controller.position;
-        // Undo the default jump
-        pos.jumpTo(beforeJump);
-        // Animate smoothly to accumulated target
-        pos.animateTo(
-          target,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-        );
-      });
-
-      _resetTimer?.cancel();
-      _resetTimer = Timer(const Duration(milliseconds: 350), () {
-        _isWheelScrolling = false;
-      });
+      GestureBinding.instance.pointerSignalResolver.register(
+        event,
+        (PointerSignalEvent resolved) {
+          if (resolved is PointerScrollEvent) {
+            _handleSmooth(resolved);
+          }
+        },
+      );
     }
   }
 
@@ -136,8 +134,89 @@ class _SmoothWheelScrollState extends State<_SmoothWheelScroll> {
   Widget build(BuildContext context) {
     return Listener(
       onPointerSignal: _onPointerSignal,
+      behavior: HitTestBehavior.translucent,
       child: widget.child,
     );
+  }
+}
+
+/// Replaces the Scrollable's default instant jump on mouse wheel
+/// with a smooth animated scroll. Uses a custom ScrollPosition
+/// that overrides pointerScroll to animate instead of jumping.
+///
+/// This approach is more reliable than pointerSignalResolver
+/// because it works at the ScrollPosition level — no race conditions.
+/// ScrollController that provides smooth mouse wheel scrolling.
+/// Use as PrimaryScrollController or pass to any ScrollView.
+class SmoothScrollController extends ScrollController {
+  SmoothScrollController({
+    super.initialScrollOffset,
+    super.keepScrollOffset,
+    super.debugLabel,
+  });
+
+  @override
+  ScrollPosition createScrollPosition(
+    ScrollPhysics physics,
+    ScrollContext context,
+    ScrollPosition? oldPosition,
+  ) {
+    return _SmoothScrollPosition(
+      physics: physics,
+      context: context,
+      initialPixels: initialScrollOffset,
+      keepScrollOffset: keepScrollOffset,
+      oldPosition: oldPosition,
+      debugLabel: debugLabel,
+    );
+  }
+}
+
+class _SmoothScrollPosition extends ScrollPositionWithSingleContext {
+  double _targetPixels = 0.0;
+  bool _isSmoothScrolling = false;
+  Timer? _resetTimer;
+
+  _SmoothScrollPosition({
+    required super.physics,
+    required super.context,
+    super.initialPixels,
+    super.keepScrollOffset,
+    super.oldPosition,
+    super.debugLabel,
+  });
+
+  @override
+  void dispose() {
+    _resetTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void pointerScroll(double delta) {
+    // Replace the default jumpTo with animateTo for smooth wheel scroll
+    if (delta == 0.0) return;
+
+    if (!_isSmoothScrolling) {
+      _targetPixels = pixels;
+      _isSmoothScrolling = true;
+    }
+
+    _targetPixels = (_targetPixels + delta).clamp(
+      minScrollExtent,
+      maxScrollExtent,
+    );
+
+    animateTo(
+      _targetPixels,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+    );
+
+    _resetTimer?.cancel();
+    _resetTimer = Timer(const Duration(milliseconds: 350), () {
+      _isSmoothScrolling = false;
+    });
   }
 }
 

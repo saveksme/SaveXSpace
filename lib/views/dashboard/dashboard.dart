@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/gestures.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
+import 'package:fl_clash/core/core.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/models/models.dart';
@@ -13,6 +16,11 @@ import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+
+const _kExcludeProxyTypes = {
+  'Direct', 'Reject', 'Selector', 'URLTest', 'Fallback',
+  'LoadBalance', 'Relay', 'Compatible',
+};
 
 class DashboardView extends ConsumerStatefulWidget {
   const DashboardView({super.key});
@@ -30,6 +38,7 @@ class _DashboardViewState extends ConsumerState<DashboardView>
   late AnimationController _meshController;
   late AnimationController _auroraController;
   late AnimationController _cardsController;
+  final _pageScrollController = SmoothScrollController();
   double _lastAuroraTarget = -1;
   bool _wasStarted = false;
 
@@ -86,6 +95,7 @@ class _DashboardViewState extends ConsumerState<DashboardView>
     _meshController.dispose();
     _auroraController.dispose();
     _cardsController.dispose();
+    _pageScrollController.dispose();
     super.dispose();
   }
 
@@ -183,6 +193,8 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                 ),
                 Expanded(
                   child: SingleChildScrollView(
+                    controller: _pageScrollController,
+                    physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                   children: [
@@ -273,6 +285,13 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                     // Subscription card under mode selector
                     _SubscriptionCard(primaryColor: primaryColor),
                     const SizedBox(height: 12),
+                    // Region selector — always visible
+                    if (hasProfile)
+                      _ProxySelector(
+                        primaryColor: primaryColor,
+                        currentMode: mode,
+                      ),
+                    const SizedBox(height: 12),
                     if (isStart || _cardsController.value > 0) ...[
                       _BlurRevealCard(
                         animation: _cardsController,
@@ -290,12 +309,6 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                         animation: _cardsController,
                         delay: 0.24,
                         child: _NetworkInfoRow(primaryColor: primaryColor),
-                      ),
-                      const SizedBox(height: 12),
-                      _BlurRevealCard(
-                        animation: _cardsController,
-                        delay: 0.36,
-                        child: _ActiveProxyCard(primaryColor: primaryColor),
                       ),
                     ],
                     const SizedBox(height: 12),
@@ -1007,97 +1020,187 @@ class _AnnounceBanner extends ConsumerWidget {
   }
 }
 
-// Subscription info card (always visible)
-class _SubscriptionCard extends ConsumerWidget {
+// Subscription info card with animated border on refresh
+class _SubscriptionCard extends ConsumerStatefulWidget {
   final Color primaryColor;
   const _SubscriptionCard({required this.primaryColor});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SubscriptionCard> createState() => _SubscriptionCardState();
+}
+
+class _SubscriptionCardState extends ConsumerState<_SubscriptionCard>
+    with TickerProviderStateMixin {
+  late AnimationController _borderController;
+  late AnimationController _successController;
+  bool _isRefreshing = false;
+  bool _showSuccess = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _borderController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    );
+    _successController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _successController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _showSuccess = false);
+        _successController.reset();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _borderController.dispose();
+    _successController.dispose();
+    super.dispose();
+  }
+
+  void _onRefreshStart() {
+    setState(() {
+      _isRefreshing = true;
+      _showSuccess = false;
+    });
+    _borderController.repeat();
+  }
+
+  void _onRefreshEnd() {
+    _borderController.stop();
+    _borderController.animateTo(1.0, duration: const Duration(milliseconds: 300))
+      .then((_) {
+        if (mounted) {
+          _borderController.reset();
+          setState(() {
+            _isRefreshing = false;
+            _showSuccess = true;
+          });
+          _successController.forward(from: 0.0);
+        }
+      });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final profile = ref.watch(currentProfileProvider);
     if (profile == null) return const SizedBox.shrink();
 
     final sub = profile.subscriptionInfo;
     final label = profile.label.isNotEmpty ? profile.label : profile.url;
+    final primaryColor = widget.primaryColor;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D0D),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1A1A1A)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.sim_card_outlined, size: 16, color: primaryColor.withValues(alpha: 0.6)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(fontSize: 13, color: Colors.white60, fontWeight: FontWeight.w500),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          if (sub != null && sub.total > 0) ...[
-            const SizedBox(height: 12),
-            _DataUsageBar(
-              used: sub.upload + sub.download,
-              total: sub.total,
-              primaryColor: primaryColor,
-            ),
-            const SizedBox(height: 10),
+    return AnimatedBuilder(
+      animation: Listenable.merge([_borderController, _successController]),
+      builder: (context, child) {
+        CustomPainter? painter;
+        if (_isRefreshing) {
+          painter = _RefreshBorderPainter(
+            progress: _borderController.value,
+            color: const Color(0xFFE879A8),
+            borderRadius: 14,
+          );
+        } else if (_showSuccess) {
+          painter = _SuccessBorderPainter(
+            progress: _successController.value,
+            color: const Color(0xFF34D399),
+            borderRadius: 14,
+          );
+        }
+        return CustomPaint(
+          foregroundPainter: painter,
+          child: child,
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0D0D),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF1A1A1A)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Row(
               children: [
+                Icon(Icons.sim_card_outlined, size: 16, color: primaryColor.withValues(alpha: 0.6)),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${((sub.upload + sub.download) as num).traffic.show} / ${(sub.total as num).traffic.show}',
-                    style: const TextStyle(fontSize: 12, color: Colors.white38),
+                    label,
+                    style: const TextStyle(fontSize: 13, color: Colors.white60, fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
+                ),
+                const SizedBox(width: 8),
+                _RefreshButton(
+                  primaryColor: primaryColor,
+                  profile: profile,
+                  onRefreshStart: _onRefreshStart,
+                  onRefreshEnd: _onRefreshEnd,
                 ),
               ],
             ),
-          ],
-          const SizedBox(height: 10),
-          // Expiry + last update in one row
-          Row(
-            children: [
-              Icon(
-                _isInfinite(sub) ? Icons.all_inclusive_rounded : Icons.timer_outlined,
-                size: 11,
-                color: _isInfinite(sub)
-                    ? Colors.white24
-                    : _expiryColor(sub?.expire ?? 0),
+            if (sub != null && sub.total > 0) ...[
+              const SizedBox(height: 12),
+              _DataUsageBar(
+                used: sub.upload + sub.download,
+                total: sub.total,
+                primaryColor: primaryColor,
               ),
-              const SizedBox(width: 4),
-              Text(
-                _isInfinite(sub) ? 'Бесконечная' : _formatExpiry(sub!.expire),
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${((sub.upload + sub.download) as num).traffic.show} / ${(sub.total as num).traffic.show}',
+                      style: const TextStyle(fontSize: 12, color: Colors.white38),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  _isInfinite(sub) ? Icons.all_inclusive_rounded : Icons.timer_outlined,
+                  size: 11,
                   color: _isInfinite(sub)
                       ? Colors.white24
                       : _expiryColor(sub?.expire ?? 0),
                 ),
-              ),
-              if (profile.lastUpdateDate != null) ...[
+                const SizedBox(width: 4),
                 Text(
-                  '  ·  ',
-                  style: const TextStyle(fontSize: 10, color: Colors.white12),
+                  _isInfinite(sub) ? 'Бесконечная' : _formatExpiry(sub!.expire),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: _isInfinite(sub)
+                        ? Colors.white24
+                        : _expiryColor(sub?.expire ?? 0),
+                  ),
                 ),
-                Text(
-                  'Обновлено: ${_formatDate(profile.lastUpdateDate!)}',
-                  style: const TextStyle(fontSize: 10, color: Colors.white24),
-                ),
+                if (profile.lastUpdateDate != null) ...[
+                  Text(
+                    '  ·  ',
+                    style: const TextStyle(fontSize: 10, color: Colors.white12),
+                  ),
+                  Text(
+                    'Обновлено: ${_formatDate(profile.lastUpdateDate!)}',
+                    style: const TextStyle(fontSize: 10, color: Colors.white24),
+                  ),
+                ],
               ],
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1133,6 +1236,178 @@ class _SubscriptionCard extends ConsumerWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+  }
+}
+
+/// Paints a thin animated gradient arc that sweeps around the card — Material You style
+class _RefreshBorderPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final double borderRadius;
+
+  _RefreshBorderPainter({
+    required this.progress,
+    required this.color,
+    required this.borderRadius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(borderRadius));
+
+    // Flat, uniform-speed line tracing the border
+    final path = Path()..addRRect(rrect);
+    final metric = path.computeMetrics().first;
+    final totalLen = metric.length;
+
+    // Line segment: 15% of perimeter, moves at constant speed
+    final lineLen = totalLen * 0.15;
+    final start = (progress * totalLen) % totalLen;
+    final end = start + lineLen;
+
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.square
+      ..strokeJoin = StrokeJoin.miter;
+
+    if (end <= totalLen) {
+      final segment = metric.extractPath(start, end);
+      canvas.drawPath(segment, paint);
+    } else {
+      // Wraps around
+      final seg1 = metric.extractPath(start, totalLen);
+      final seg2 = metric.extractPath(0, end - totalLen);
+      canvas.drawPath(seg1, paint);
+      canvas.drawPath(seg2, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RefreshBorderPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+/// Green border that draws fully around the card then fades out on success.
+class _SuccessBorderPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final double borderRadius;
+
+  _SuccessBorderPainter({
+    required this.progress,
+    required this.color,
+    required this.borderRadius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(borderRadius));
+
+    final path = Path()..addRRect(rrect);
+    final metric = path.computeMetrics().first;
+    final totalLen = metric.length;
+
+    // Phase 1 (0..0.5): draw the border progressively
+    // Phase 2 (0.5..1.0): fade out the full border
+    final drawT = (progress / 0.5).clamp(0.0, 1.0);
+    final fadeT = ((progress - 0.5) / 0.5).clamp(0.0, 1.0);
+    final alpha = (1.0 - Curves.easeOut.transform(fadeT)) * 0.8;
+
+    if (alpha <= 0.01) return;
+
+    final paint = Paint()
+      ..color = color.withValues(alpha: alpha)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.square;
+
+    final len = Curves.easeOutCubic.transform(drawT) * totalLen;
+    if (len > 0) {
+      final segment = metric.extractPath(0, len);
+      canvas.drawPath(segment, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SuccessBorderPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+class _RefreshButton extends StatefulWidget {
+  final Color primaryColor;
+  final Profile profile;
+  final VoidCallback? onRefreshStart;
+  final VoidCallback? onRefreshEnd;
+  const _RefreshButton({
+    required this.primaryColor,
+    required this.profile,
+    this.onRefreshStart,
+    this.onRefreshEnd,
+  });
+
+  @override
+  State<_RefreshButton> createState() => _RefreshButtonState();
+}
+
+class _RefreshButtonState extends State<_RefreshButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _spinController;
+  bool _isRefreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _spinController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+  }
+
+  @override
+  void dispose() {
+    _spinController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    _spinController.repeat();
+    widget.onRefreshStart?.call();
+    try {
+      await appController.updateProfile(widget.profile);
+    } catch (_) {}
+    if (mounted) {
+      _spinController.stop();
+      _spinController.reset();
+      setState(() => _isRefreshing = false);
+      widget.onRefreshEnd?.call();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _refresh,
+      child: AnimatedBuilder(
+        animation: _spinController,
+        builder: (_, child) {
+          return Transform.rotate(
+            angle: _spinController.value * math.pi * 2,
+            child: child,
+          );
+        },
+        child: Icon(
+          Icons.refresh_rounded,
+          size: 18,
+          color: widget.primaryColor.withValues(alpha: 0.4),
+        ),
+      ),
+    );
   }
 }
 
@@ -1276,68 +1551,407 @@ class _InfoTile extends StatelessWidget {
   }
 }
 
-// Active proxy card — shows current group + selected proxy, navigates to proxies on tap
-class _ActiveProxyCard extends ConsumerWidget {
+/// Proxy selector — dropdown for Global mode, link to Routes for Rule/Auto mode
+class _ProxySelector extends ConsumerStatefulWidget {
   final Color primaryColor;
-  const _ActiveProxyCard({required this.primaryColor});
+  final Mode currentMode;
+  const _ProxySelector({required this.primaryColor, required this.currentMode});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(currentProfileProvider);
-    if (profile == null) return const SizedBox.shrink();
+  ConsumerState<_ProxySelector> createState() => _ProxySelectorState();
+}
 
-    final currentGroupName = profile.currentGroupName ?? '';
-    final selectedMap = ref.watch(selectedMapProvider);
-    final selectedProxy = selectedMap[currentGroupName] ?? '';
+class _ProxySelectorState extends ConsumerState<_ProxySelector>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _expandController;
+  late Animation<double> _expandAnimation;
+  bool _expanded = false;
+  bool _isPinging = false;
 
-    if (currentGroupName.isEmpty) return const SizedBox.shrink();
+  @override
+  void initState() {
+    super.initState();
+    _expandController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _expandAnimation = CurvedAnimation(
+      parent: _expandController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+  }
 
+  @override
+  void dispose() {
+    _expandController.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    setState(() => _expanded = !_expanded);
+    if (_expanded) {
+      _expandController.forward();
+    } else {
+      _expandController.reverse();
+    }
+  }
+
+  Future<void> _pingAll(List<Proxy> proxies, String? testUrl) async {
+    if (_isPinging) return;
+    setState(() => _isPinging = true);
+    // Import delay test from proxies common
+    final proxyNames = proxies.map((p) => p.name).toSet().toList();
+    final delayFutures = proxyNames.map<Future>((proxyName) async {
+      final groups = appController.groups;
+      final selectedMap = appController.currentProfile?.selectedMap ?? {};
+      final state = computeRealSelectedProxyState(
+        proxyName,
+        groups: groups,
+        selectedMap: selectedMap,
+      );
+      final url = state.testUrl.takeFirstValid([
+        appController.getRealTestUrl(testUrl),
+      ]);
+      final name = state.proxyName;
+      if (name.isEmpty) return;
+      appController.setDelay(Delay(url: url, name: name, value: 0));
+      appController.setDelay(await coreController.getDelay(url, name));
+    }).toList();
+    final batches = delayFutures.batch(100);
+    for (final batch in batches) {
+      await Future.wait(batch);
+    }
+    appController.addSortNum();
+    if (mounted) setState(() => _isPinging = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isGlobal = widget.currentMode == Mode.global;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.97, end: 1.0).animate(animation),
+            child: child,
+          ),
+        );
+      },
+      child: isGlobal
+          ? KeyedSubtree(
+              key: const ValueKey('global_selector'),
+              child: _buildGlobalSelector(),
+            )
+          : KeyedSubtree(
+              key: const ValueKey('routes_link'),
+              child: _buildRoutesLink(),
+            ),
+    );
+  }
+
+  Widget _buildRoutesLink() {
     return GestureDetector(
       onTap: () => appController.toPage(PageLabel.proxies),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: const Color(0xFF0D0D0D),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF1A1A1A)),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF1A1A1F)),
         ),
         child: Row(
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: primaryColor.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
+            Icon(Icons.route_rounded, size: 18,
+                color: widget.primaryColor.withValues(alpha: 0.5)),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Настроить маршруты',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white54,
+                ),
               ),
-              child: Icon(Icons.route_rounded, size: 18, color: primaryColor.withValues(alpha: 0.6)),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            const Icon(Icons.chevron_right_rounded,
+                size: 18, color: Colors.white24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlobalSelector() {
+    final groups = ref.watch(currentGroupsStateProvider).value;
+    final globalGroup = groups.where(
+        (g) => g.name == GroupName.GLOBAL.name).toList();
+    if (globalGroup.isEmpty) return const SizedBox.shrink(key: ValueKey('empty'));
+
+    final group = globalGroup.first;
+    // Filter out DIRECT, REJECT, and group-type proxies (Selector, URLTest, Fallback, etc.)
+    final proxies = group.all
+        .where((p) => !_kExcludeProxyTypes.contains(p.type) &&
+            p.name != 'DIRECT' && p.name != 'REJECT')
+        .toList();
+    final selectedProxy = ref.watch(
+      getSelectedProxyNameProvider(GroupName.GLOBAL.name),
+    ) ?? '';
+
+    return AnimatedContainer(
+      key: const ValueKey('global_selector'),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: _expanded
+            ? const Color(0xFF111116)
+            : const Color(0xFF0D0D0D),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _expanded
+              ? widget.primaryColor.withValues(alpha: 0.12)
+              : const Color(0xFF1A1A1F),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          GestureDetector(
+            onTap: _toggle,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              child: Row(
                 children: [
-                  EmojiText(
-                    selectedProxy.isNotEmpty ? selectedProxy : '—',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white70,
+                  // Active dot
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.primaryColor.withValues(
+                          alpha: selectedProxy.isNotEmpty ? 1.0 : 0.3),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
-                  EmojiText(
-                    currentGroupName,
-                    style: const TextStyle(fontSize: 11, color: Colors.white24),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  const SizedBox(width: 12),
+                  // Selected proxy name
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Сервер',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.white.withValues(alpha: 0.3),
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        EmojiText(
+                          selectedProxy.isNotEmpty
+                              ? selectedProxy
+                              : 'Не выбран',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: selectedProxy.isNotEmpty
+                                ? Colors.white.withValues(alpha: 0.85)
+                                : Colors.white.withValues(alpha: 0.3),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Ping all button
+                  GestureDetector(
+                    onTap: () => _pingAll(proxies, group.testUrl),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: widget.primaryColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_isPinging)
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: widget.primaryColor.withValues(alpha: 0.6),
+                              ),
+                            )
+                          else
+                            Icon(Icons.speed_rounded, size: 14,
+                                color: widget.primaryColor.withValues(alpha: 0.6)),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Ping',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: widget.primaryColor.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Expand arrow
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(Icons.expand_more_rounded,
+                        size: 20, color: Colors.white.withValues(alpha: 0.25)),
                   ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, size: 18, color: Colors.white24),
+          ),
+          // Animated list with blur reveal
+          AnimatedBuilder(
+            animation: _expandAnimation,
+            builder: (context, _) {
+              final t = _expandAnimation.value;
+              if (t <= 0.0) return const SizedBox.shrink();
+              final blur = (1.0 - t) * 8.0;
+              final maxH = 280.0;
+
+              Widget content = Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Divider
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      height: 1,
+                      color: Colors.white.withValues(alpha: 0.05),
+                    ),
+                  ),
+                  // Proxy list with scroll isolation
+                  _IsolatedScrollList(
+                    height: (proxies.length * 42.0).clamp(0.0, maxH - 1) * t,
+                    itemCount: proxies.length,
+                    itemBuilder: (_, index) {
+                      final proxy = proxies[index];
+                      final isActive = proxy.name == selectedProxy;
+                      return _ProxyListItem(
+                        proxy: proxy,
+                        testUrl: group.testUrl,
+                        isActive: isActive,
+                        primaryColor: widget.primaryColor,
+                        onTap: () {
+                          appController.updateCurrentSelectedMap(
+                              GroupName.GLOBAL.name, proxy.name);
+                          appController.changeProxyDebounce(
+                              GroupName.GLOBAL.name, proxy.name);
+                          _toggle();
+                        },
+                      );
+                    },
+                  ),
+                ],
+              );
+
+              if (blur > 0.5) {
+                content = ClipRect(
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(
+                      sigmaX: blur,
+                      sigmaY: blur,
+                      tileMode: TileMode.decal,
+                    ),
+                    child: content,
+                  ),
+                );
+              }
+
+              return Opacity(opacity: t, child: content);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProxyListItem extends StatelessWidget {
+  final Proxy proxy;
+  final String? testUrl;
+  final bool isActive;
+  final Color primaryColor;
+  final VoidCallback onTap;
+
+  const _ProxyListItem({
+    required this.proxy,
+    required this.testUrl,
+    required this.isActive,
+    required this.primaryColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive
+              ? primaryColor.withValues(alpha: 0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            // Active indicator
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: isActive ? 4 : 0,
+              height: 4,
+              margin: EdgeInsets.only(right: isActive ? 10 : 0),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: primaryColor,
+              ),
+            ),
+            // Name
+            Expanded(
+              child: EmojiText(
+                proxy.name,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                  color: isActive
+                      ? Colors.white.withValues(alpha: 0.9)
+                      : Colors.white.withValues(alpha: 0.5),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            // Delay with blur reveal animation
+            _AnimatedDelay(proxyName: proxy.name, testUrl: testUrl),
           ],
         ),
       ),
@@ -1362,9 +1976,9 @@ class _DataUsageBar extends StatelessWidget {
     final barColor = ratio > 0.9 ? Colors.red : (ratio > 0.7 ? Colors.amber : primaryColor);
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
+      borderRadius: BorderRadius.circular(2),
       child: SizedBox(
-        height: 4,
+        height: 3,
         child: LinearProgressIndicator(
           value: ratio,
           backgroundColor: const Color(0xFF1A1A1A),
@@ -1374,3 +1988,168 @@ class _DataUsageBar extends StatelessWidget {
     );
   }
 }
+
+/// Animated delay indicator — blur reveals when ping result arrives.
+class _AnimatedDelay extends ConsumerStatefulWidget {
+  final String proxyName;
+  final String? testUrl;
+
+  const _AnimatedDelay({required this.proxyName, required this.testUrl});
+
+  @override
+  ConsumerState<_AnimatedDelay> createState() => _AnimatedDelayState();
+}
+
+class _AnimatedDelayState extends ConsumerState<_AnimatedDelay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  int? _prevDelay;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+      value: 1.0, // start fully revealed
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final delay = ref.watch(
+      getDelayProvider(proxyName: widget.proxyName, testUrl: widget.testUrl),
+    );
+
+    // Detect transition from loading (0) to result
+    if (_prevDelay == 0 && delay != null && delay != 0) {
+      _controller.forward(from: 0.0);
+    }
+    _prevDelay = delay;
+
+    if (delay == null) {
+      return Text(
+        '\u2014',
+        style: TextStyle(
+          fontSize: 10,
+          color: Colors.white.withValues(alpha: 0.2),
+        ),
+      );
+    }
+    if (delay == 0) {
+      return SizedBox(
+        width: 10,
+        height: 10,
+        child: CircularProgressIndicator(
+          strokeWidth: 1,
+          color: Colors.white.withValues(alpha: 0.2),
+        ),
+      );
+    }
+
+    final color = delay > 0
+        ? (delay < 300
+            ? const Color(0xFF34D399)
+            : delay < 600
+                ? const Color(0xFFFBBF24)
+                : const Color(0xFFF87171))
+        : const Color(0xFFF87171);
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = Curves.easeOutCubic.transform(_controller.value);
+        final blur = (1.0 - t) * 5.0;
+        Widget result = Opacity(
+          opacity: t,
+          child: child,
+        );
+        if (blur > 0.3) {
+          result = ClipRect(
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(
+                sigmaX: blur, sigmaY: blur, tileMode: TileMode.decal,
+              ),
+              child: result,
+            ),
+          );
+        }
+        return result;
+      },
+      child: Text(
+        delay > 0 ? '${delay}ms' : '---',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+/// A scroll list that captures mouse wheel events to prevent them
+/// from bubbling to the parent scrollable (page scroll).
+class _IsolatedScrollList extends StatefulWidget {
+  final double height;
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+
+  const _IsolatedScrollList({
+    required this.height,
+    required this.itemCount,
+    required this.itemBuilder,
+  });
+
+  @override
+  State<_IsolatedScrollList> createState() => _IsolatedScrollListState();
+}
+
+class _IsolatedScrollListState extends State<_IsolatedScrollList> {
+  final _controller = SmoothScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      // Always consume wheel events — prevent parent page from scrolling
+      GestureBinding.instance.pointerSignalResolver.register(
+        event,
+        (event) {},
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: widget.height,
+      child: Listener(
+        onPointerSignal: _onPointerSignal,
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            scrollbars: false,
+          ),
+          child: ListView.builder(
+            controller: _controller,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            physics: const BouncingScrollPhysics(),
+            itemCount: widget.itemCount,
+            itemBuilder: widget.itemBuilder,
+          ),
+        ),
+      ),
+    );
+  }
+}
+

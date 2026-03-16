@@ -813,9 +813,9 @@ class _ActiveSubscriptionCardState extends State<_ActiveSubscriptionCard>
     _isSaveXDialogOpen = true;
     showGeneralDialog(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false,
       barrierLabel: 'SaveX',
-      barrierColor: Colors.black54,
+      barrierColor: Colors.transparent,
       transitionDuration: const Duration(milliseconds: 500),
       pageBuilder: (ctx, anim, secondAnim) {
         return _SaveXParticleDialog(
@@ -1109,6 +1109,7 @@ class _SaveXParticleDialogState extends State<_SaveXParticleDialog>
   late AnimationController _entranceController;
   late List<_Particle> _particles;
   final math.Random _rng = math.Random();
+  bool _isClosing = false;
 
   @override
   void initState() {
@@ -1147,6 +1148,8 @@ class _SaveXParticleDialogState extends State<_SaveXParticleDialog>
   }
 
   void _close() {
+    if (_isClosing) return;
+    _isClosing = true;
     _entranceController.reverse().then((_) {
       if (mounted) Navigator.of(context).pop();
     });
