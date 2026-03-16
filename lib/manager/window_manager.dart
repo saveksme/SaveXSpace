@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
@@ -263,14 +264,76 @@ class _WindowHeaderState extends State<WindowHeader> {
   }
 }
 
-class AppIcon extends StatelessWidget {
+class AppIcon extends ConsumerStatefulWidget {
   const AppIcon({super.key});
 
   @override
+  ConsumerState<AppIcon> createState() => _AppIconState();
+}
+
+class _AppIconState extends ConsumerState<AppIcon>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+  bool _isHovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  bool get _isOnDashboard {
+    return ref.read(currentPageLabelProvider) == PageLabel.dashboard;
+  }
+
+  void _onTap() {
+    if (_isOnDashboard) return;
+    _pulseController.forward(from: 0.0);
+    appController.toPage(PageLabel.dashboard);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: Image.asset('assets/images/icon.png', width: 36, height: 36),
+    final currentPage = ref.watch(currentPageLabelProvider);
+    final isOnDashboard = currentPage == PageLabel.dashboard;
+
+    return MouseRegion(
+      cursor: isOnDashboard ? SystemMouseCursors.basic : SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: _onTap,
+        child: AnimatedBuilder(
+          animation: _pulseController,
+          builder: (context, child) {
+            final pulse = math.sin(_pulseController.value * math.pi) * 0.2;
+            final scale = 1.0 + pulse;
+            final hoverScale = (_isHovered && !isOnDashboard) ? 1.06 : 1.0;
+
+            return Transform.scale(
+              scale: scale * hoverScale,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/images/icon.png',
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

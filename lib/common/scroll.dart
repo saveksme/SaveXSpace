@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/widgets/scroll.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 class BaseScrollBehavior extends MaterialScrollBehavior {
@@ -17,14 +19,30 @@ class BaseScrollBehavior extends MaterialScrollBehavior {
   };
 
   @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    return const BouncingScrollPhysics(
+      decelerationRate: ScrollDecelerationRate.normal,
+    );
+  }
+
+  @override
   Widget buildScrollbar(
     BuildContext context,
     Widget child,
     ScrollableDetails details,
   ) {
+    Widget result = child;
+
+    if (system.isDesktop && details.controller != null) {
+      result = _SmoothWheelScroll(
+        controller: details.controller!,
+        child: result,
+      );
+    }
+
     switch (axisDirectionToAxis(details.direction)) {
       case Axis.horizontal:
-        return child;
+        return result;
       case Axis.vertical:
         switch (getPlatform(context)) {
           case TargetPlatform.linux:
@@ -33,14 +51,93 @@ class BaseScrollBehavior extends MaterialScrollBehavior {
             assert(details.controller != null);
             return CommonScrollBar(
               controller: details.controller,
-              child: child,
+              child: result,
             );
           case TargetPlatform.android:
           case TargetPlatform.fuchsia:
           case TargetPlatform.iOS:
-            return child;
+            return result;
         }
     }
+  }
+}
+
+/// Intercepts mouse wheel events and replaces the default instant jump
+/// with a smooth animated scroll. Works by scheduling a microtask
+/// that undoes the default jump and animates to the target instead.
+class _SmoothWheelScroll extends StatefulWidget {
+  final ScrollController controller;
+  final Widget child;
+
+  const _SmoothWheelScroll({
+    required this.controller,
+    required this.child,
+  });
+
+  @override
+  State<_SmoothWheelScroll> createState() => _SmoothWheelScrollState();
+}
+
+class _SmoothWheelScrollState extends State<_SmoothWheelScroll> {
+  double _targetOffset = 0;
+  bool _isWheelScrolling = false;
+  Timer? _resetTimer;
+
+  @override
+  void dispose() {
+    _resetTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      final controller = widget.controller;
+      if (!controller.hasClients) return;
+      final pos = controller.position;
+      if (pos.maxScrollExtent <= pos.minScrollExtent) return;
+
+      // Capture position before the default handler jumps
+      final beforeJump = pos.pixels;
+
+      if (!_isWheelScrolling) {
+        _targetOffset = beforeJump;
+        _isWheelScrolling = true;
+      }
+
+      _targetOffset = (_targetOffset + event.scrollDelta.dy)
+          .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+
+      final target = _targetOffset;
+
+      // After the default handler's jumpTo, undo it and animate smoothly.
+      // scheduleMicrotask runs after dispatchEvent completes but before
+      // the next frame renders, so the user never sees the jump.
+      scheduleMicrotask(() {
+        if (!controller.hasClients) return;
+        final pos = controller.position;
+        // Undo the default jump
+        pos.jumpTo(beforeJump);
+        // Animate smoothly to accumulated target
+        pos.animateTo(
+          target,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+        );
+      });
+
+      _resetTimer?.cancel();
+      _resetTimer = Timer(const Duration(milliseconds: 350), () {
+        _isWheelScrolling = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerSignal: _onPointerSignal,
+      child: widget.child,
+    );
   }
 }
 
@@ -51,6 +148,12 @@ class HiddenBarScrollBehavior extends BaseScrollBehavior {
     Widget child,
     ScrollableDetails details,
   ) {
+    if (system.isDesktop && details.controller != null) {
+      return _SmoothWheelScroll(
+        controller: details.controller!,
+        child: child,
+      );
+    }
     return child;
   }
 }
@@ -62,7 +165,14 @@ class ShowBarScrollBehavior extends BaseScrollBehavior {
     Widget child,
     ScrollableDetails details,
   ) {
-    return CommonScrollBar(controller: details.controller, child: child);
+    Widget result = child;
+    if (system.isDesktop && details.controller != null) {
+      result = _SmoothWheelScroll(
+        controller: details.controller!,
+        child: result,
+      );
+    }
+    return CommonScrollBar(controller: details.controller, child: result);
   }
 }
 
@@ -113,54 +223,6 @@ class NextClampingScrollPhysics extends ClampingScrollPhysics {
     );
   }
 }
-
-// class CacheScrollPositionController extends ScrollController {
-//   final String key;
-//
-//   CacheScrollPositionController({
-//     required this.key,
-//     double initialScrollOffset = 0.0,
-//     super.keepScrollOffset = true,
-//     super.debugLabel,
-//     super.onAttach,
-//     super.onDetach,
-//   });
-//
-//   @override
-//   ScrollPosition createScrollPosition(
-//     ScrollPhysics physics,
-//     ScrollContext context,
-//     ScrollPosition? oldPosition,
-//   ) {
-//     return ScrollPositionWithSingleContext(
-//       physics: physics,
-//       context: context,
-//       initialPixels:
-//           globalState.scrollPositionCache[key] ?? initialScrollOffset,
-//       keepScrollOffset: keepScrollOffset,
-//       oldPosition: oldPosition,
-//       debugLabel: debugLabel,
-//     );
-//   }
-//
-//   double? get cacheOffset => globalState.scrollPositionCache[key];
-//
-//   _handleScroll() {
-//     globalState.scrollPositionCache[key] = position.pixels;
-//   }
-//
-//   @override
-//   void attach(ScrollPosition position) {
-//     super.attach(position);
-//     addListener(_handleScroll);
-//   }
-//
-//   @override
-//   void detach(ScrollPosition position) {
-//     removeListener(_handleScroll);
-//     super.detach(position);
-//   }
-// }
 
 class ReverseScrollController extends ScrollController {
   ReverseScrollController({

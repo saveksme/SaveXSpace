@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
@@ -26,6 +27,11 @@ class _DashboardViewState extends ConsumerState<DashboardView>
   late Animation<double> _pulseAnimation;
   late AnimationController _connectingController;
   late AnimationController _rippleController;
+  late AnimationController _meshController;
+  late AnimationController _auroraController;
+  late AnimationController _cardsController;
+  double _lastAuroraTarget = -1;
+  bool _wasStarted = false;
 
   @override
   void initState() {
@@ -48,6 +54,28 @@ class _DashboardViewState extends ConsumerState<DashboardView>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
+
+    _meshController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 120),
+    )..repeat();
+
+    _auroraController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+      value: 0.0,
+    );
+
+    _cardsController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+      value: 0.0,
+    );
+    _cardsController.addStatusListener((status) {
+      if (status == AnimationStatus.dismissed) {
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -55,6 +83,9 @@ class _DashboardViewState extends ConsumerState<DashboardView>
     _pulseController.dispose();
     _connectingController.dispose();
     _rippleController.dispose();
+    _meshController.dispose();
+    _auroraController.dispose();
+    _cardsController.dispose();
     super.dispose();
   }
 
@@ -87,34 +118,73 @@ class _DashboardViewState extends ConsumerState<DashboardView>
       _connectingController.stop();
     }
 
+    // Trigger blur animation for VPN cards (in on connect, out on disconnect)
+    if (isStart && !_wasStarted) {
+      _cardsController.forward(from: 0.0);
+    } else if (!isStart && _wasStarted) {
+      _cardsController.reverse();
+    }
+    _wasStarted = isStart;
+
+    // Smooth aurora intensity transitions
+    final auroraTarget = isStart ? 1.0 : (coreStatus == CoreStatus.connecting ? 0.55 : 0.0);
+    if (_lastAuroraTarget != auroraTarget) {
+      _lastAuroraTarget = auroraTarget;
+      if (auroraTarget == 1.0) {
+        _auroraController.animateTo(1.0, duration: const Duration(milliseconds: 800), curve: Curves.easeOutCubic);
+      } else if (auroraTarget > 0) {
+        _auroraController.animateTo(0.55, duration: const Duration(milliseconds: 600), curve: Curves.easeInOut);
+      } else {
+        _auroraController.animateTo(0.0, duration: const Duration(milliseconds: 1200), curve: Curves.easeInCubic);
+      }
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: Row(
-                children: [
-                  Text(
-                    appLocalizations.dashboard,
-                    style: const TextStyle(
-                      fontFamily: 'SpaceGrotesk',
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      letterSpacing: -0.3,
+            // Animated aurora + data flow background
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_meshController, _auroraController]),
+                builder: (context, _) {
+                  return CustomPaint(
+                    painter: _AuroraFlowPainter(
+                      progress: _meshController.value,
+                      color: primaryColor,
+                      intensity: _auroraController.value,
                     ),
-                  ),
-                  const Spacer(),
-                  _CoreStatusDot(coreStatus: coreStatus),
-                ],
+                  );
+                },
               ),
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
+            // Main content
+            Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  child: Row(
+                    children: [
+                      Text(
+                        appLocalizations.dashboard,
+                        style: const TextStyle(
+                          fontFamily: 'SpaceGrotesk',
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const Spacer(),
+                      _CoreStatusDot(coreStatus: coreStatus),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
                   children: [
                     const SizedBox(height: 16),
                     if (hasProfile) ...[
@@ -203,14 +273,30 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                     // Subscription card under mode selector
                     _SubscriptionCard(primaryColor: primaryColor),
                     const SizedBox(height: 12),
-                    if (isStart) ...[
-                      _SpeedCard(primaryColor: primaryColor),
+                    if (isStart || _cardsController.value > 0) ...[
+                      _BlurRevealCard(
+                        animation: _cardsController,
+                        delay: 0.0,
+                        child: _SpeedCard(primaryColor: primaryColor),
+                      ),
                       const SizedBox(height: 12),
-                      _TotalTrafficCard(primaryColor: primaryColor),
+                      _BlurRevealCard(
+                        animation: _cardsController,
+                        delay: 0.12,
+                        child: _TotalTrafficCard(primaryColor: primaryColor),
+                      ),
                       const SizedBox(height: 12),
-                      _NetworkInfoRow(primaryColor: primaryColor),
+                      _BlurRevealCard(
+                        animation: _cardsController,
+                        delay: 0.24,
+                        child: _NetworkInfoRow(primaryColor: primaryColor),
+                      ),
                       const SizedBox(height: 12),
-                      _ActiveProxyCard(primaryColor: primaryColor),
+                      _BlurRevealCard(
+                        animation: _cardsController,
+                        delay: 0.36,
+                        child: _ActiveProxyCard(primaryColor: primaryColor),
+                      ),
                     ],
                     const SizedBox(height: 12),
                     _AnnounceBanner(primaryColor: primaryColor),
@@ -221,9 +307,252 @@ class _DashboardViewState extends ConsumerState<DashboardView>
             ),
           ],
         ),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _BlurRevealCard extends StatelessWidget {
+  final Animation<double> animation;
+  final double delay;
+  final Widget child;
+
+  const _BlurRevealCard({
+    required this.animation,
+    required this.delay,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        final end = (delay + 0.6).clamp(0.0, 1.0);
+        final t = ((animation.value - delay) / (end - delay)).clamp(0.0, 1.0);
+        final curved = Curves.easeOutCubic.transform(t);
+        final opacity = curved;
+        final blur = (1.0 - curved) * 12.0;
+        final translateY = (1.0 - curved) * 24.0;
+
+        if (opacity <= 0.0) {
+          return const SizedBox.shrink();
+        }
+
+        return Transform.translate(
+          offset: Offset(0, translateY),
+          child: Opacity(
+            opacity: opacity,
+            child: blur > 0.5
+                ? ClipRect(
+                    child: ImageFiltered(
+                      imageFilter: ImageFilter.blur(
+                        sigmaX: blur,
+                        sigmaY: blur,
+                        tileMode: TileMode.decal,
+                      ),
+                      child: child,
+                    ),
+                  )
+                : child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AuroraFlowPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final double intensity;
+
+  static final List<_FlowParticle> _particles = _generateParticles(40);
+
+  _AuroraFlowPainter({
+    required this.progress,
+    required this.color,
+    required this.intensity,
+  });
+
+  static List<_FlowParticle> _generateParticles(int count) {
+    final rng = math.Random(77);
+    return List.generate(count, (_) => _FlowParticle(
+      x: rng.nextDouble(),
+      speed: 0.3 + rng.nextDouble() * 0.7,
+      size: 0.8 + rng.nextDouble() * 1.5,
+      waveIndex: rng.nextInt(5),
+      phase: rng.nextDouble() * math.pi * 2,
+      brightness: 0.4 + rng.nextDouble() * 0.6,
+    ));
+  }
+
+  // Compute wave Y at normalized x position for a given wave layer.
+  // All speed multipliers are integers so the wave loops seamlessly at t=0..1.
+  double _waveY(double x, int layer, double t, double h, double w) {
+    final baseY = 0.2 + layer * 0.15;
+    final ampScale = w;
+    final amp = 0.025 + layer * 0.006;
+    final freq = 1.5 + layer * 0.4;
+    // Integer speeds ensure sin/cos repeat exactly over t=0..1
+    final speed = (1 + layer).toDouble();
+    final wave = math.sin((x * freq + t * speed) * math.pi * 2) * amp
+        + math.sin((x * freq * 1.7 + t * speed * 2.0 + layer) * math.pi * 2) * amp * 0.5
+        + math.cos((x * freq * 0.5 + t * speed * 3.0) * math.pi * 2) * amp * 0.3;
+    return baseY * h + wave * ampScale;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final t = progress;
+
+    // ─── 1. Aurora wave ribbons ───
+    for (int layer = 0; layer < 5; layer++) {
+      final path = Path();
+      final steps = 80;
+
+      // Build wave path
+      for (int i = 0; i <= steps; i++) {
+        final x = (i / steps) * w;
+        final nx = i / steps;
+        final y = _waveY(nx, layer, t, h, w);
+        if (i == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+      }
+
+      // Stroke the wave line
+      final waveAlpha = (0.03 + layer * 0.012) * intensity;
+      final wavePaint = Paint()
+        ..color = color.withValues(alpha: waveAlpha.clamp(0.0, 1.0))
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0 + (layer * 0.3)
+        ..strokeCap = StrokeCap.round;
+      canvas.drawPath(path, wavePaint);
+
+      // Soft glow ribbon beneath wave (filled area)
+      if (intensity > 0.15) {
+        final glowPath = Path();
+        for (int i = 0; i <= steps; i++) {
+          final x = (i / steps) * w;
+          final nx = i / steps;
+          final y = _waveY(nx, layer, t, h, w);
+          if (i == 0) {
+            glowPath.moveTo(x, y);
+          } else {
+            glowPath.lineTo(x, y);
+          }
+        }
+        // Close downward to create a filled band
+        final bandH = 25.0 + layer * 8.0;
+        for (int i = steps; i >= 0; i--) {
+          final x = (i / steps) * w;
+          final nx = i / steps;
+          final y = _waveY(nx, layer, t, h, w) + bandH;
+          glowPath.lineTo(x, y);
+        }
+        glowPath.close();
+
+        final glowAlpha = (0.008 + layer * 0.003) * intensity;
+        final glowPaint = Paint()
+          ..color = color.withValues(alpha: glowAlpha.clamp(0.0, 1.0))
+          ..style = PaintingStyle.fill;
+        canvas.drawPath(glowPath, glowPaint);
+      }
+    }
+
+    // ─── 2. Floating data particles ───
+    if (intensity > 0.15) {
+      final dotPaint = Paint()..style = PaintingStyle.fill;
+      final speed = 0.4 + 0.6 * intensity;
+
+      for (final p in _particles) {
+        // Particle drifts along its wave
+        final px = ((p.x + t * p.speed * speed * 0.15 + p.phase) % 1.0);
+        final py = _waveY(px, p.waveIndex, t, h, w);
+
+        // Vertical bob
+        final bob = math.sin(t * math.pi * 2 * 3 + p.phase) * 4;
+
+        final alpha = (0.08 + p.brightness * 0.12) * intensity;
+        dotPaint.color = color.withValues(alpha: alpha.clamp(0.0, 1.0));
+        canvas.drawCircle(
+          Offset(px * w, py + bob),
+          p.size * (0.7 + 0.3 * intensity),
+          dotPaint,
+        );
+
+        // Tiny trail behind particle
+        if (intensity > 0.8) {
+          for (int trail = 1; trail <= 3; trail++) {
+            final tx = px - trail * 0.008 * p.speed;
+            if (tx < 0) continue;
+            final ty = _waveY(tx, p.waveIndex, t, h, w);
+            final trailAlpha = alpha * (1.0 - trail * 0.3);
+            dotPaint.color = color.withValues(alpha: trailAlpha.clamp(0.0, 1.0));
+            canvas.drawCircle(
+              Offset(tx * w, ty + bob * (1.0 - trail * 0.2)),
+              p.size * 0.5,
+              dotPaint,
+            );
+          }
+        }
+      }
+    }
+
+    // ─── 3. Center radial glow (subtle) ───
+    if (intensity > 0.05) {
+      final centerX = w * 0.5;
+      final centerY = h * 0.28; // Near the connect button
+      final glowRadius = w * (0.25 + 0.2 * intensity);
+      final glowAlpha = 0.06 * intensity;
+      // Pulsing
+      final pulse = 1.0 + 0.15 * math.sin(t * math.pi * 2 * 4);
+
+      final radialPaint = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            color.withValues(alpha: glowAlpha * pulse),
+            color.withValues(alpha: 0.0),
+          ],
+          stops: const [0.0, 1.0],
+        ).createShader(Rect.fromCircle(
+          center: Offset(centerX, centerY),
+          radius: glowRadius,
+        ));
+
+      canvas.drawCircle(Offset(centerX, centerY), glowRadius, radialPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AuroraFlowPainter oldDelegate) =>
+      oldDelegate.progress != progress ||
+      oldDelegate.intensity != intensity;
+}
+
+class _FlowParticle {
+  final double x;
+  final double speed;
+  final double size;
+  final int waveIndex;
+  final double phase;
+  final double brightness;
+
+  const _FlowParticle({
+    required this.x,
+    required this.speed,
+    required this.size,
+    required this.waveIndex,
+    required this.phase,
+    required this.brightness,
+  });
 }
 
 class _CoreStatusDot extends StatelessWidget {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
@@ -185,7 +186,7 @@ class AppSidebarContainer extends ConsumerWidget {
                 if (system.isMacOS) SizedBox(height: 22),
                 SizedBox(height: 10),
                 if (!system.isMacOS) ...[
-                  ClipRect(child: AppIcon()),
+                  AppIcon(),
                   SizedBox(height: 12),
                 ],
                 Expanded(
