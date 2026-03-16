@@ -247,29 +247,13 @@ func handleAsyncTestDelay(paramsString string, fn func(string)) {
 		}
 		delayData.Url = testUrl
 
-		// TCP ping: measure only TCP dial time (no HTTP/TLS overhead)
-		addr, err := adapter.UrlToMetadata(testUrl)
+		// Full HTTP URL test through proxy chain (works with bridges/relays)
+		delay, err := proxy.URLTest(ctx, testUrl, nil)
 		if err != nil {
 			delayData.Value = -1
 			data, _ := json.Marshal(delayData)
 			fn(string(data))
 			return false, nil
-		}
-
-		start := time.Now()
-		conn, err := proxy.DialContext(ctx, &addr)
-		if err != nil {
-			delayData.Value = -1
-			data, _ := json.Marshal(delayData)
-			fn(string(data))
-			return false, nil
-		}
-		elapsed := time.Since(start)
-		_ = conn.Close()
-
-		delay := uint16(elapsed / time.Millisecond)
-		if delay == 0 {
-			delay = 1
 		}
 
 		delayData.Value = int32(delay)
