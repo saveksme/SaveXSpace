@@ -208,38 +208,28 @@ class Windows {
   // }
 
   Future<WindowsHelperServiceStatus> checkService() async {
-    commonPrint.log('[HELPER] checkService START');
     final result = await Process.run('sc', ['query', appHelperService]);
-    commonPrint.log('[HELPER] sc query exitCode=${result.exitCode}');
     if (result.exitCode != 0) {
-      commonPrint.log('[HELPER] service not found (none)');
       return WindowsHelperServiceStatus.none;
     }
     final output = result.stdout.toString();
     final isRunning = output.contains('RUNNING');
-    commonPrint.log('[HELPER] service RUNNING=$isRunning');
     if (isRunning) {
       final pingOk = await request.pingHelper();
-      commonPrint.log('[HELPER] pingHelper result=$pingOk');
       if (pingOk) {
         return WindowsHelperServiceStatus.running;
       }
     }
-    commonPrint.log('[HELPER] service status=presence');
     return WindowsHelperServiceStatus.presence;
   }
 
   Future<bool> registerService() async {
-    commonPrint.log('[HELPER] registerService START');
     final status = await checkService();
-    commonPrint.log('[HELPER] initial status=$status');
 
     if (status == WindowsHelperServiceStatus.running) {
-      commonPrint.log('[HELPER] already running, returning true');
       return true;
     }
 
-    commonPrint.log('[HELPER] helperPath=${appPath.helperPath}');
     final command = [
       '/c',
       if (status == WindowsHelperServiceStatus.presence) ...[
@@ -264,19 +254,15 @@ class Windows {
       appHelperService,
     ].join(' ');
 
-    commonPrint.log('[HELPER] runas command: $command');
     final res = runas('cmd.exe', command);
-    commonPrint.log('[HELPER] runas result=$res');
 
     await Future.delayed(Duration(milliseconds: 300));
-    commonPrint.log('[HELPER] waiting for service to start (max 5 retries)...');
     final retryStatus = await retry(
       task: checkService,
       maxAttempts: 5,
       retryIf: (status) => status != WindowsHelperServiceStatus.running,
       delay: Duration(seconds: 1),
     );
-    commonPrint.log('[HELPER] final retryStatus=$retryStatus');
     return res && retryStatus == WindowsHelperServiceStatus.running;
   }
 

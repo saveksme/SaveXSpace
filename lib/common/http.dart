@@ -10,7 +10,6 @@ class SaveXSpaceHttpOverrides extends HttpOverrides {
     }
     final port = appController.config.patchClashConfig.mixedPort;
     final isStart = appController.isStart;
-    commonPrint.log('find $url proxy:$isStart');
     if (!isStart) return 'DIRECT';
     return 'PROXY localhost:$port';
   }

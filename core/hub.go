@@ -7,6 +7,7 @@ import (
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
 	"github.com/metacubex/mihomo/common/observable"
+	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/mihomo/component/mmdb"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/component/updater"
@@ -223,6 +224,12 @@ func handleAsyncTestDelay(paramsString string, fn func(string)) {
 			return false, nil
 		}
 
+		expectedStatus, err := utils.NewUnsignedRanges[uint16]("")
+		if err != nil {
+			fn("")
+			return false, nil
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(params.Timeout))
 		defer cancel()
 
@@ -247,9 +254,8 @@ func handleAsyncTestDelay(paramsString string, fn func(string)) {
 		}
 		delayData.Url = testUrl
 
-		// Full HTTP URL test through proxy chain (works with bridges/relays)
-		delay, err := proxy.URLTest(ctx, testUrl, nil)
-		if err != nil {
+		delay, err := proxy.URLTest(ctx, testUrl, expectedStatus)
+		if err != nil || delay == 0 {
 			delayData.Value = -1
 			data, _ := json.Marshal(delayData)
 			fn(string(data))
