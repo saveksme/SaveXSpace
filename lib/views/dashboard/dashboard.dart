@@ -1123,81 +1123,82 @@ class _SubscriptionCardState extends ConsumerState<_SubscriptionCard>
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: const Color(0xFF1A1A1A)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                Icon(Icons.sim_card_outlined, size: 16, color: primaryColor.withValues(alpha: 0.6)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: const TextStyle(fontSize: 13, color: Colors.white60, fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _RefreshButton(
-                  primaryColor: primaryColor,
-                  profile: profile,
-                  onRefreshStart: _onRefreshStart,
-                  onRefreshEnd: _onRefreshEnd,
-                ),
-              ],
-            ),
-            if (sub != null && sub.total > 0) ...[
-              const SizedBox(height: 12),
-              _DataUsageBar(
-                used: sub.upload + sub.download,
-                total: sub.total,
-                primaryColor: primaryColor,
-              ),
-              const SizedBox(height: 10),
-              Row(
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
+                  Row(
+                    children: [
+                      Icon(Icons.sim_card_outlined, size: 16, color: primaryColor.withValues(alpha: 0.6)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: const TextStyle(fontSize: 13, color: Colors.white60, fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (sub != null && sub.total > 0) ...[
+                    const SizedBox(height: 12),
+                    _DataUsageBar(
+                      used: sub.upload + sub.download,
+                      total: sub.total,
+                      primaryColor: primaryColor,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
                       '${((sub.upload + sub.download) as num).traffic.show} / ${(sub.total as num).traffic.show}',
                       style: const TextStyle(fontSize: 12, color: Colors.white38),
                     ),
+                  ],
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(
+                        _isInfinite(sub) ? Icons.all_inclusive_rounded : Icons.timer_outlined,
+                        size: 11,
+                        color: _isInfinite(sub)
+                            ? Colors.white24
+                            : _expiryColor(sub?.expire ?? 0),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isInfinite(sub) ? 'Бесконечная' : _formatExpiry(sub!.expire),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: _isInfinite(sub)
+                              ? Colors.white24
+                              : _expiryColor(sub?.expire ?? 0),
+                        ),
+                      ),
+                      if (profile.lastUpdateDate != null) ...[
+                        Text(
+                          '  ·  ',
+                          style: const TextStyle(fontSize: 10, color: Colors.white12),
+                        ),
+                        Text(
+                          'Обновлено: ${_formatDate(profile.lastUpdateDate!)}',
+                          style: const TextStyle(fontSize: 10, color: Colors.white24),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
-            ],
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(
-                  _isInfinite(sub) ? Icons.all_inclusive_rounded : Icons.timer_outlined,
-                  size: 11,
-                  color: _isInfinite(sub)
-                      ? Colors.white24
-                      : _expiryColor(sub?.expire ?? 0),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _isInfinite(sub) ? 'Бесконечная' : _formatExpiry(sub!.expire),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: _isInfinite(sub)
-                        ? Colors.white24
-                        : _expiryColor(sub?.expire ?? 0),
-                  ),
-                ),
-                if (profile.lastUpdateDate != null) ...[
-                  Text(
-                    '  ·  ',
-                    style: const TextStyle(fontSize: 10, color: Colors.white12),
-                  ),
-                  Text(
-                    'Обновлено: ${_formatDate(profile.lastUpdateDate!)}',
-                    style: const TextStyle(fontSize: 10, color: Colors.white24),
-                  ),
-                ],
-              ],
+            ),
+            const SizedBox(width: 12),
+            _RefreshButton(
+              primaryColor: primaryColor,
+              profile: profile,
+              onRefreshStart: _onRefreshStart,
+              onRefreshEnd: _onRefreshEnd,
             ),
           ],
         ),
@@ -1658,10 +1659,10 @@ class _ProxySelectorState extends ConsumerState<_ProxySelector>
     return GestureDetector(
       onTap: () => appController.toPage(PageLabel.proxies),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         decoration: BoxDecoration(
           color: const Color(0xFF0D0D0D),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFF1A1A1F)),
         ),
         child: Row(
@@ -1669,14 +1670,29 @@ class _ProxySelectorState extends ConsumerState<_ProxySelector>
             Icon(Icons.route_rounded, size: 18,
                 color: widget.primaryColor.withValues(alpha: 0.5)),
             const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Настроить маршруты',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white54,
-                ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Маршруты',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white.withValues(alpha: 0.3),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Настроить маршруты',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white54,
+                    ),
+                  ),
+                ],
               ),
             ),
             const Icon(Icons.chevron_right_rounded,
