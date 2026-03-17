@@ -142,35 +142,22 @@ class _ProxiesListViewState extends State<ProxiesListView> {
       ]);
       if (isExpand) {
         final proxies = group.all;
-        final chunks = proxies.chunks(columns);
-        final rows = chunks
-            .map<Widget>((proxies) {
-              final children = proxies
-                  .map<Widget>(
-                    (proxy) => Flexible(
-                      child: SizedBox(
-                        height: getItemHeight(cardType),
-                        child: ProxyCard(
-                          testUrl: group.testUrl,
-                          type: cardType,
-                          groupType: group.type,
-                          key: ValueKey('$groupName.${proxy.name}'),
-                          proxy: proxy,
-                          groupName: groupName,
-                          index: proxies.indexOf(proxy),
-                        ),
-                      ),
-                    ),
-                  )
-                  .fill(
-                    columns,
-                    filler: (_) => const Flexible(child: SizedBox()),
-                  )
-                  .separated(const SizedBox(width: 8));
-
-              return Row(children: children.toList());
-            })
-            .separated(const SizedBox(height: 8));
+        final rows = proxies
+            .map<Widget>(
+              (proxy) => SizedBox(
+                height: 64,
+                child: ProxyCard(
+                  testUrl: group.testUrl,
+                  type: cardType,
+                  groupType: group.type,
+                  key: ValueKey('$groupName.${proxy.name}'),
+                  proxy: proxy,
+                  groupName: groupName,
+                  index: proxies.indexOf(proxy),
+                ),
+              ),
+            )
+            .separated(const SizedBox(height: 6));
         items.addAll([...rows, const SizedBox(height: 8)]);
       }
     }

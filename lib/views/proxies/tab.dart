@@ -322,11 +322,15 @@ class ProxyGroupView extends ConsumerStatefulWidget {
   ConsumerState<ProxyGroupView> createState() => _ProxyGroupViewState();
 }
 
-class _ProxyGroupViewState extends ConsumerState<ProxyGroupView> {
+class _ProxyGroupViewState extends ConsumerState<ProxyGroupView>
+    with AutomaticKeepAliveClientMixin {
   late final ScrollController _controller;
 
   List<Proxy> currentProxies = [];
   String? testUrl;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -370,6 +374,7 @@ class _ProxyGroupViewState extends ConsumerState<ProxyGroupView> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final group = widget.group;
     final mode = ref.watch(
       patchClashConfigProvider.select((state) => state.mode),
@@ -393,11 +398,11 @@ class _ProxyGroupViewState extends ConsumerState<ProxyGroupView> {
           right: 16,
           bottom: 96,
         ),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: widget.columns,
-          mainAxisSpacing: 6,
-          crossAxisSpacing: 6,
-          mainAxisExtent: getItemHeight(widget.cardType),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 1,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 0,
+          mainAxisExtent: 64,
         ),
         itemCount: currentProxies.length,
         itemBuilder: (_, index) {

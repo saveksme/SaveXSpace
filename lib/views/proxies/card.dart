@@ -1,4 +1,5 @@
-import 'dart:ui';
+import 'dart:math' as math;
+import 'package:circle_flags/circle_flags.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
@@ -11,15 +12,44 @@ import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// ── Minimal palette ──
-const _kCardBg = Color(0xFF0E0E11);
-const _kCardBorder = Color(0xFF1A1A1F);
-const _kSelectedBorder = Color(0xFF2A2A35);
-const _kTextPrimary = Color(0xDEFFFFFF);
-const _kTextMuted = Color(0x4DFFFFFF);
-const _kGood = Color(0xFF34D399);
-const _kMedium = Color(0xFFFBBF24);
-const _kBad = Color(0xFFF87171);
+/// Extract leading flag emoji from proxy name.
+/// Returns country code (lowercase, e.g. "de") and cleaned name.
+({String? countryCode, String name}) _extractFlag(String raw) {
+  final runes = raw.runes.toList();
+  if (runes.length >= 2) {
+    final a = runes[0];
+    final b = runes[1];
+    // Regional Indicator Symbol range: 0x1F1E6 (🇦) to 0x1F1FF (🇿)
+    if (a >= 0x1F1E6 && a <= 0x1F1FF && b >= 0x1F1E6 && b <= 0x1F1FF) {
+      // Convert to 2-letter country code
+      final code = String.fromCharCodes([
+        a - 0x1F1E6 + 0x41, // 'A'
+        b - 0x1F1E6 + 0x41,
+      ]).toLowerCase();
+      // Strip flag + optional trailing space/separator
+      var rest = String.fromCharCodes(runes.sublist(2));
+      rest = rest.trimLeft();
+      if (rest.startsWith('|') || rest.startsWith('-') || rest.startsWith('·')) {
+        rest = rest.substring(1).trimLeft();
+      }
+      return (countryCode: code, name: rest.isEmpty ? raw : rest);
+    }
+  }
+  return (countryCode: null, name: raw);
+}
+
+/// Track which proxies have already animated in this session
+final Set<String> _animatedProxies = {};
+
+// ── Dashboard-matching palette (dark) ──
+const _kCardBg = Color(0xFF0D0D0D);
+const _kCardBorder = Color(0xFF1A1A1A);
+const _kPillBg = Color(0xFF151515);
+const _kOnSurface = Color(0xFFE6E1E5);
+const _kOnSurfaceMuted = Color(0xFF666666);
+const _kGood = Color(0xFF81D4A4);
+const _kMedium = Color(0xFFF0C96D);
+const _kBad = Color(0xFFF2918A);
 
 class ProxyCard extends StatefulWidget {
   final String groupName;
@@ -43,10 +73,37 @@ class ProxyCard extends StatefulWidget {
   State<ProxyCard> createState() => _ProxyCardState();
 }
 
-class _ProxyCardState extends State<ProxyCard> {
+class _ProxyCardState extends State<ProxyCard>
+    with SingleTickerProviderStateMixin {
   bool _pressed = false;
+  late AnimationController _enterController;
 
   Measure get measure => globalState.measure;
+
+  @override
+  void initState() {
+    super.initState();
+    final proxyKey = '${widget.groupName}/${widget.proxy.name}';
+    final alreadySeen = _animatedProxies.contains(proxyKey);
+    _enterController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+      value: alreadySeen ? 1.0 : 0.0,
+    );
+    if (!alreadySeen) {
+      _animatedProxies.add(proxyKey);
+      final stagger = math.min(widget.index * 25, 250);
+      Future.delayed(Duration(milliseconds: stagger), () {
+        if (mounted) _enterController.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _enterController.dispose();
+    super.dispose();
+  }
 
   void _handleTestCurrentDelay() {
     proxyDelayTest(widget.proxy, widget.testUrl);
@@ -75,6 +132,20 @@ class _ProxyCardState extends State<ProxyCard> {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
+    return FadeTransition(
+      opacity: CurvedAnimation(
+        parent: _enterController,
+        curve: Curves.easeOut,
+      ),
+      child: _buildCard(primaryColor),
+    );
+  }
+
+  Widget _buildCard(Color primaryColor) {
+    final extracted = _extractFlag(widget.proxy.name);
+    final countryCode = extracted.countryCode;
+    final displayName = extracted.name;
+
     return Consumer(
       builder: (context, ref, _) {
         final selectedProxyName = ref.watch(
@@ -91,65 +162,72 @@ class _ProxyCardState extends State<ProxyCard> {
           onTapUp: (_) => setState(() => _pressed = false),
           onTapCancel: () => setState(() => _pressed = false),
           child: AnimatedScale(
-            scale: _pressed ? 0.97 : 1.0,
-            duration: const Duration(milliseconds: 120),
+            scale: _pressed ? 0.98 : 1.0,
+            duration: const Duration(milliseconds: 100),
             curve: Curves.easeOut,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? primaryColor.withValues(alpha: 0.06)
+                    ? primaryColor.withValues(alpha: 0.08)
                     : _kCardBg,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isSelected
-                      ? primaryColor.withValues(alpha: 0.35)
+                      ? primaryColor.withValues(alpha: 0.3)
                       : _kCardBorder,
-                  width: 1,
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
                 children: [
-                  // Row 1: name + delay
-                  Row(
-                    children: [
-                      // Active indicator
-                      if (widget.groupType.isComputedSelected)
-                        _ActiveIndicator(
-                          groupName: widget.groupName,
-                          proxy: widget.proxy,
-                          primaryColor: primaryColor,
-                        ),
-                      // Name
-                      Expanded(
-                        child: _buildName(isSelected, primaryColor),
-                      ),
-                      const SizedBox(width: 8),
-                      // Delay
-                      _DelayText(
-                        proxy: widget.proxy,
-                        testUrl: widget.testUrl,
-                        onTest: _handleTestCurrentDelay,
-                      ),
-                    ],
+                  // Leading: circle flag or active indicator
+                  _LeadingIndicator(
+                    groupName: widget.groupName,
+                    groupType: widget.groupType,
+                    proxy: widget.proxy,
+                    primaryColor: primaryColor,
+                    isSelected: isSelected,
+                    countryCode: countryCode,
                   ),
-                  if (widget.type == ProxyCardType.expand) ...[
-                    const SizedBox(height: 2),
-                    _ProxyDesc(proxy: widget.proxy),
-                  ],
-                  const Spacer(),
-                  // Row 2: protocol type
-                  Text(
-                    widget.proxy.type,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: _kTextMuted,
-                      letterSpacing: 0.3,
+                  const SizedBox(width: 12),
+                  // Name + protocol
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        EmojiText(
+                          displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                            color: isSelected ? Colors.white : _kOnSurface,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.proxy.type,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: _kOnSurfaceMuted,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Delay pill
+                  _DelayPill(
+                    proxy: widget.proxy,
+                    testUrl: widget.testUrl,
+                    onTest: _handleTestCurrentDelay,
+                    primaryColor: primaryColor,
                   ),
                 ],
               ),
@@ -159,42 +237,129 @@ class _ProxyCardState extends State<ProxyCard> {
       },
     );
   }
+}
 
-  Widget _buildName(bool isSelected, Color primaryColor) {
-    final maxLines = widget.type == ProxyCardType.min ? 1 : 2;
-    return SizedBox(
-      height: measure.bodyMediumHeight * maxLines,
-      child: EmojiText(
-        widget.proxy.name,
-        maxLines: maxLines,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-          color: isSelected ? Colors.white : _kTextPrimary,
+/// Leading circle indicator — shows drawn flag, active check, or globe
+class _LeadingIndicator extends ConsumerWidget {
+  final String groupName;
+  final GroupType groupType;
+  final Proxy proxy;
+  final Color primaryColor;
+  final bool isSelected;
+  final String? countryCode;
+
+  const _LeadingIndicator({
+    required this.groupName,
+    required this.groupType,
+    required this.proxy,
+    required this.primaryColor,
+    required this.isSelected,
+    this.countryCode,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bool isActive;
+    if (groupType.isComputedSelected) {
+      final proxyName = ref.watch(getProxyNameProvider(groupName));
+      isActive = proxyName == proxy.name;
+    } else {
+      isActive = false;
+    }
+
+    // If we have a country code, show a drawn circular flag filling the circle
+    if (countryCode != null) {
+      return SizedBox(
+        width: 28,
+        height: 28,
+        child: Stack(
+          children: [
+            ClipOval(
+              child: CircleFlag(countryCode!, size: 28),
+            ),
+            if (isActive)
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: primaryColor.withValues(alpha: 0.7),
+                    width: 2,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    // No flag — show check or globe in a circle
+    Widget inner;
+    if (isActive) {
+      inner = Icon(
+        Icons.check_rounded,
+        key: const ValueKey('check'),
+        size: 16,
+        color: primaryColor,
+      );
+    } else {
+      inner = Icon(
+        Icons.public_rounded,
+        key: const ValueKey('globe'),
+        size: 14,
+        color: _kOnSurfaceMuted.withValues(alpha: 0.5),
+      );
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isActive
+            ? primaryColor.withValues(alpha: 0.15)
+            : isSelected
+                ? primaryColor.withValues(alpha: 0.06)
+                : _kPillBg,
+        border: Border.all(
+          color: isActive
+              ? primaryColor.withValues(alpha: 0.5)
+              : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      child: Center(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: inner,
         ),
       ),
     );
   }
 }
 
-/// Delay text with blur reveal animation when value appears
-class _DelayText extends StatefulWidget {
+/// Delay shown as a styled pill/chip
+class _DelayPill extends StatefulWidget {
   final Proxy proxy;
   final String? testUrl;
   final VoidCallback onTest;
+  final Color primaryColor;
 
-  const _DelayText({
+  const _DelayPill({
     required this.proxy,
     required this.testUrl,
     required this.onTest,
+    required this.primaryColor,
   });
 
   @override
-  State<_DelayText> createState() => _DelayTextState();
+  State<_DelayPill> createState() => _DelayPillState();
 }
 
-class _DelayTextState extends State<_DelayText>
+class _DelayPillState extends State<_DelayPill>
     with SingleTickerProviderStateMixin {
   late AnimationController _animController;
   int? _lastDelay;
@@ -211,7 +376,7 @@ class _DelayTextState extends State<_DelayText>
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 450),
       value: 1.0,
     );
   }
@@ -223,7 +388,6 @@ class _DelayTextState extends State<_DelayText>
   }
 
   void _onDelayChanged(int? delay) {
-    // Animate when transitioning from testing (0) to a real value
     if (_lastDelay == 0 && delay != null && delay != 0) {
       _animController.forward(from: 0.0);
     }
@@ -235,94 +399,85 @@ class _DelayTextState extends State<_DelayText>
     return Consumer(
       builder: (context, ref, _) {
         final delay = ref.watch(
-          getDelayProvider(proxyName: widget.proxy.name, testUrl: widget.testUrl),
+          getDelayProvider(
+              proxyName: widget.proxy.name, testUrl: widget.testUrl),
         );
 
         _onDelayChanged(delay);
 
+        // No data — tap to test
         if (delay == null) {
           return GestureDetector(
             onTap: widget.onTest,
-            child: const Text(
-              '\u2014',
-              style: TextStyle(fontSize: 11, color: _kTextMuted),
-            ),
-          );
-        }
-
-        if (delay == 0) {
-          return const SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(
-              strokeWidth: 1.5,
-              color: _kTextMuted,
-            ),
-          );
-        }
-
-        final color = _color(delay);
-        return AnimatedBuilder(
-          animation: _animController,
-          builder: (_, child) {
-            final t = Curves.easeOutCubic.transform(_animController.value);
-            final blur = (1.0 - t) * 6.0;
-            Widget result = child!;
-            if (blur > 0.3) {
-              result = ImageFiltered(
-                imageFilter: ImageFilter.blur(
-                  sigmaX: blur,
-                  sigmaY: blur,
-                  tileMode: TileMode.decal,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _kPillBg,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                '— ms',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: _kOnSurfaceMuted,
+                  fontWeight: FontWeight.w500,
                 ),
-                child: result,
-              );
-            }
-            return Opacity(opacity: t.clamp(0.0, 1.0), child: result);
-          },
+              ),
+            ),
+          );
+        }
+
+        // Testing in progress
+        if (delay == 0) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: _kPillBg,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: widget.primaryColor.withValues(alpha: 0.5),
+              ),
+            ),
+          );
+        }
+
+        // Result
+        final color = _color(delay);
+        return FadeTransition(
+          opacity: CurvedAnimation(
+            parent: _animController,
+            curve: Curves.easeOut,
+          ),
           child: GestureDetector(
             onTap: widget.onTest,
-            child: Text(
-              delay > 0 ? '${delay}ms' : '---',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: color,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.25),
+                  width: 0.5,
+                ),
+              ),
+              child: Text(
+                delay > 0 ? '${delay}ms' : '--',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                  letterSpacing: 0.2,
+                ),
               ),
             ),
           ),
         );
       },
-    );
-  }
-}
-
-/// Small active dot inline before name
-class _ActiveIndicator extends ConsumerWidget {
-  final String groupName;
-  final Proxy proxy;
-  final Color primaryColor;
-
-  const _ActiveIndicator({
-    required this.groupName,
-    required this.proxy,
-    required this.primaryColor,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final proxyName = ref.watch(getProxyNameProvider(groupName));
-    if (proxyName != proxy.name) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: Container(
-        width: 6,
-        height: 6,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: primaryColor,
-        ),
-      ),
     );
   }
 }
@@ -342,7 +497,7 @@ class _ProxyDesc extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
           fontSize: 10,
-          color: _kTextMuted,
+          color: _kOnSurfaceMuted,
         ),
       ),
     );
