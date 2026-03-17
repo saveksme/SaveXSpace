@@ -371,10 +371,15 @@ class _ProxyGroupViewState extends ConsumerState<ProxyGroupView> {
   @override
   Widget build(BuildContext context) {
     final group = widget.group;
-    final proxies = group.all
-        .where((p) => !_kExcludeProxyTypes.contains(p.type) &&
-            p.name != 'DIRECT' && p.name != 'REJECT')
-        .toList();
+    final mode = ref.watch(
+      patchClashConfigProvider.select((state) => state.mode),
+    );
+    final proxies = mode == Mode.global
+        ? group.all
+            .where((p) => !_kExcludeProxyTypes.contains(p.type) &&
+                p.name != 'DIRECT' && p.name != 'REJECT')
+            .toList()
+        : group.all.toList();
     testUrl = group.testUrl;
     currentProxies = proxies;
     return CommonScrollBar(

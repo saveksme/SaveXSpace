@@ -4,6 +4,7 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'card.dart';
 import 'input.dart';
@@ -284,7 +285,12 @@ class ListItem<T> extends StatelessWidget {
       minVerticalPadding: minVerticalPadding,
       subtitle: subtitle,
       titleAlignment: tileTitleAlignment,
-      onTap: onTap,
+      onTap: onTap != null
+          ? () {
+              HapticFeedback.selectionClick();
+              onTap();
+            }
+          : null,
       trailing: trailing ?? this.trailing,
       contentPadding: padding,
     );

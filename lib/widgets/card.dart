@@ -2,6 +2,7 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'fade_box.dart';
 import 'text.dart';
@@ -183,7 +184,12 @@ class CommonCard extends StatelessWidget {
     }
 
     final card = OutlinedButton(
-      onLongPress: onLongPress,
+      onLongPress: onLongPress != null
+          ? () {
+              HapticFeedback.mediumImpact();
+              onLongPress!();
+            }
+          : null,
       clipBehavior: Clip.antiAlias,
       style: ButtonStyle(
         padding: const WidgetStatePropertyAll(EdgeInsets.zero),
@@ -204,7 +210,12 @@ class CommonCard extends StatelessWidget {
           (states) => getBorderSide(context, states),
         ),
       ),
-      onPressed: onPressed,
+      onPressed: onPressed != null
+          ? () {
+              HapticFeedback.lightImpact();
+              onPressed!();
+            }
+          : null,
       child: childWidget,
     );
 

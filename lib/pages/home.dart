@@ -44,6 +44,7 @@ class HomePage extends StatelessWidget {
                   const TextStyle(fontFamily: 'SpaceGrotesk', fontSize: 10, letterSpacing: 0.5),
                 ),
                 onDestinationSelected: (index) {
+                  HapticFeedback.selectionClick();
                   appController.toPage(navigationItems[index].label);
                 },
                 selectedIndex: currentIndex,

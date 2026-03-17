@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/core/core.dart';
@@ -41,6 +42,8 @@ class _DashboardViewState extends ConsumerState<DashboardView>
   final _pageScrollController = SmoothScrollController();
   double _lastAuroraTarget = -1;
   bool _wasStarted = false;
+  bool _isRefreshing = false;
+  final _subscriptionCardKey = GlobalKey<_SubscriptionCardState>();
 
   @override
   void initState() {
@@ -100,12 +103,30 @@ class _DashboardViewState extends ConsumerState<DashboardView>
   }
 
   void _handleToggle() {
+    HapticFeedback.heavyImpact();
     final isStart = ref.read(isStartProvider);
     // Trigger ripple animation on tap
     _rippleController.forward(from: 0.0);
     debouncer.call(FunctionTag.updateStatus, () {
       appController.updateStatus(!isStart, isInit: !ref.read(initProvider));
     }, duration: commonDuration);
+  }
+
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    HapticFeedback.mediumImpact();
+    _subscriptionCardKey.currentState?._onRefreshStart();
+    try {
+      final profileId = ref.read(currentProfileIdProvider);
+      final profiles = ref.read(profilesProvider);
+      final profile = profiles.getProfile(profileId);
+      if (profile != null) {
+        await appController.updateProfile(profile, showLoading: true);
+      }
+    } catch (_) {}
+    _subscriptionCardKey.currentState?._onRefreshEnd();
+    setState(() => _isRefreshing = false);
   }
 
   @override
@@ -192,9 +213,12 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                   ),
                 ),
                 Expanded(
-                  child: SingleChildScrollView(
+                  child: _VortexRefresh(
+                    onRefresh: _handleRefresh,
+                    color: primaryColor,
+                    child: SingleChildScrollView(
                     controller: _pageScrollController,
-                    physics: const BouncingScrollPhysics(),
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                   children: [
@@ -283,7 +307,7 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                       ),
                     const SizedBox(height: 16),
                     // Subscription card under mode selector
-                    _SubscriptionCard(primaryColor: primaryColor),
+                    _SubscriptionCard(key: _subscriptionCardKey, primaryColor: primaryColor),
                     const SizedBox(height: 12),
                     // Region selector — always visible
                     if (hasProfile)
@@ -317,6 +341,7 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                   ],
                 ),
               ),
+            ),
             ),
           ],
         ),
@@ -375,6 +400,237 @@ class _BlurRevealCard extends StatelessWidget {
       },
     );
   }
+}
+
+// ─── Minimal Pull-to-Refresh ───
+
+class _VortexRefresh extends StatefulWidget {
+  final Widget child;
+  final Future<void> Function() onRefresh;
+  final Color color;
+
+  const _VortexRefresh({
+    required this.child,
+    required this.onRefresh,
+    required this.color,
+  });
+
+  @override
+  State<_VortexRefresh> createState() => _VortexRefreshState();
+}
+
+class _VortexRefreshState extends State<_VortexRefresh>
+    with TickerProviderStateMixin {
+  double _dragOffset = 0.0;
+  bool _isRefreshing = false;
+  bool _isDragging = false;
+  late AnimationController _spinController;
+  late AnimationController _snapBackController;
+  late AnimationController _successController;
+  double _snapFrom = 0.0;
+  bool _showSuccess = false;
+
+  static const _threshold = 80.0;
+  static const _maxDrag = 140.0;
+  static const _restHeight = 56.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _spinController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _snapBackController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    )..addListener(() {
+      setState(() {
+        _dragOffset = _snapFrom * (1.0 - Curves.easeOutCubic.transform(_snapBackController.value));
+      });
+    });
+    _successController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..addListener(() => setState(() {}))
+     ..addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _showSuccess = false;
+        _snapFrom = _dragOffset;
+        _snapBackController.forward(from: 0.0);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _spinController.dispose();
+    _snapBackController.dispose();
+    _successController.dispose();
+    super.dispose();
+  }
+
+  bool _handleNotification(ScrollNotification notification) {
+    if (notification is OverscrollNotification) {
+      if (notification.overscroll < 0 && !_isRefreshing && !_showSuccess) {
+        setState(() {
+          _isDragging = true;
+          final resistance = 1.0 - (_dragOffset / _maxDrag) * 0.65;
+          _dragOffset = (_dragOffset - notification.overscroll * resistance)
+              .clamp(0.0, _maxDrag);
+        });
+      }
+    }
+    if (notification is ScrollEndNotification && _isDragging) {
+      _isDragging = false;
+      if (_dragOffset >= _threshold && !_isRefreshing) {
+        _startRefresh();
+      } else if (!_isRefreshing) {
+        _snapFrom = _dragOffset;
+        _snapBackController.forward(from: 0.0);
+      }
+    }
+    return false;
+  }
+
+  Future<void> _startRefresh() async {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _isRefreshing = true;
+      _dragOffset = _restHeight;
+    });
+    _spinController.repeat();
+    await widget.onRefresh();
+    _spinController.stop();
+    setState(() {
+      _isRefreshing = false;
+      _showSuccess = true;
+    });
+    HapticFeedback.lightImpact();
+    _successController.forward(from: 0.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pullProgress = (_dragOffset / _threshold).clamp(0.0, 1.0);
+    final showIndicator = _dragOffset > 2;
+
+    return Stack(
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: _dragOffset.clamp(0.0, _restHeight)),
+          child: NotificationListener<ScrollNotification>(
+            onNotification: _handleNotification,
+            child: widget.child,
+          ),
+        ),
+        if (showIndicator)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: _dragOffset.clamp(0.0, _restHeight),
+            child: Center(
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_spinController, _successController]),
+                builder: (context, _) {
+                  return CustomPaint(
+                    size: const Size(36, 36),
+                    painter: _ArcRefreshPainter(
+                      sweep: pullProgress,
+                      spin: _spinController.value,
+                      color: _showSuccess
+                          ? Color.lerp(widget.color, const Color(0xFF4ADE80), 1.0)!
+                          : widget.color,
+                      isSpinning: _isRefreshing,
+                      fadeOut: _showSuccess ? _successController.value : 0.0,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Minimal arc indicator: a single arc that grows with pull, spins during refresh.
+class _ArcRefreshPainter extends CustomPainter {
+  final double sweep;   // 0..1 pull progress → arc length
+  final double spin;    // 0..1 rotation angle (repeating)
+  final Color color;
+  final bool isSpinning;
+  final double fadeOut;  // 0..1 fade on success
+
+  _ArcRefreshPainter({
+    required this.sweep,
+    required this.spin,
+    required this.color,
+    required this.isSpinning,
+    required this.fadeOut,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final r = size.width / 2 - 2;
+    final opacity = (1.0 - fadeOut).clamp(0.0, 1.0);
+
+    // Background track
+    final trackPaint = Paint()
+      ..color = color.withValues(alpha: 0.1 * opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(Offset(cx, cy), r, trackPaint);
+
+    // Arc
+    final arcPaint = Paint()
+      ..color = color.withValues(alpha: 0.85 * opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+
+    final startAngle = isSpinning
+        ? spin * math.pi * 2
+        : -math.pi / 2;
+    final sweepAngle = isSpinning
+        ? math.pi * 1.4 // fixed arc length while spinning
+        : sweep * math.pi * 2 * 0.85; // grows with pull
+
+    if (sweepAngle > 0.01) {
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset(cx, cy), radius: r),
+        startAngle,
+        sweepAngle,
+        false,
+        arcPaint,
+      );
+    }
+
+    // Dot at the leading end of the arc
+    if (sweep > 0.1 || isSpinning) {
+      final dotAngle = startAngle + sweepAngle;
+      final dx = cx + r * math.cos(dotAngle);
+      final dy = cy + r * math.sin(dotAngle);
+      final dotPaint = Paint()
+        ..color = color.withValues(alpha: opacity)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(dx, dy), 3.5, dotPaint);
+
+      // Subtle glow behind dot
+      dotPaint.color = color.withValues(alpha: 0.2 * opacity);
+      canvas.drawCircle(Offset(dx, dy), 7, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArcRefreshPainter old) =>
+      old.sweep != sweep || old.spin != spin ||
+      old.isSpinning != isSpinning || old.fadeOut != fadeOut ||
+      old.color != color;
 }
 
 class _AuroraFlowPainter extends CustomPainter {
@@ -623,8 +879,8 @@ class _ConnectButton extends StatelessWidget {
     return GestureDetector(
       onTap: isConnecting ? null : onTap,
       child: SizedBox(
-        width: size + 40,
-        height: size + 40,
+        width: size + 60,
+        height: size + 60,
         child: Stack(
           alignment: Alignment.center,
           children: [
@@ -649,36 +905,16 @@ class _ConnectButton extends StatelessWidget {
                 );
               },
             ),
-            // Orbiting dots during connecting state
+            // Connecting state: full custom painter with orbits, plasma ring, particles
             if (isConnecting)
               AnimatedBuilder(
                 animation: connectingController,
                 builder: (context, _) {
                   return CustomPaint(
-                    size: Size(size + 30, size + 30),
-                    painter: _OrbitingDotsPainter(
+                    size: const Size(size + 56, size + 56),
+                    painter: _ConnectingEffectPainter(
                       progress: connectingController.value,
                       color: primaryColor,
-                      dotCount: 3,
-                    ),
-                  );
-                },
-              ),
-            // Outer glow ring during connecting
-            if (isConnecting)
-              AnimatedBuilder(
-                animation: connectingController,
-                builder: (context, _) {
-                  final glowAlpha = 0.1 + 0.15 * math.sin(connectingController.value * math.pi * 2);
-                  return Container(
-                    width: size + 16,
-                    height: size + 16,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: primaryColor.withValues(alpha: glowAlpha),
-                        width: 2,
-                      ),
                     ),
                   );
                 },
@@ -700,20 +936,20 @@ class _ConnectButton extends StatelessWidget {
                   color: isConnected
                       ? primaryColor.withValues(alpha: 0.15)
                       : isConnecting
-                          ? primaryColor.withValues(alpha: 0.08)
+                          ? primaryColor.withValues(alpha: 0.06)
                           : const Color(0xFF1A1A1A),
                   border: Border.all(
                     color: isConnected
                         ? primaryColor.withValues(alpha: 0.6)
                         : isConnecting
-                            ? primaryColor.withValues(alpha: 0.35)
+                            ? primaryColor.withValues(alpha: 0.25)
                             : const Color(0xFF2A2A2A),
-                    width: 3,
+                    width: isConnecting ? 2 : 3,
                   ),
                   boxShadow: isConnected
                       ? [BoxShadow(color: primaryColor.withValues(alpha: 0.25), blurRadius: 40, spreadRadius: 5)]
                       : isConnecting
-                          ? [BoxShadow(color: primaryColor.withValues(alpha: 0.12), blurRadius: 30, spreadRadius: 2)]
+                          ? [BoxShadow(color: primaryColor.withValues(alpha: 0.18), blurRadius: 35, spreadRadius: 3)]
                           : [],
                 ),
                 child: Center(
@@ -751,27 +987,40 @@ class _ConnectingIcon extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
+        final t = controller.value;
+        final breathe = 0.5 + 0.5 * math.sin(t * math.pi * 2);
         return Stack(
           alignment: Alignment.center,
           children: [
-            // Pulsing power icon
-            Opacity(
-              opacity: 0.3 + 0.4 * math.sin(controller.value * math.pi * 2).abs(),
-              child: Icon(
-                Icons.power_settings_new,
-                size: 48,
-                color: primaryColor,
+            // Inner rotating ring
+            SizedBox(
+              width: 64,
+              height: 64,
+              child: Transform.rotate(
+                angle: t * math.pi * 2,
+                child: CustomPaint(
+                  painter: _PlasmaRingPainter(
+                    progress: t,
+                    color: primaryColor,
+                    strokeWidth: 2.0,
+                    dashCount: 12,
+                  ),
+                ),
               ),
             ),
-            // Rotating arc
-            SizedBox(
-              width: 56,
-              height: 56,
-              child: Transform.rotate(
-                angle: controller.value * math.pi * 2,
-                child: CustomPaint(
-                  painter: _ArcPainter(color: primaryColor),
-                ),
+            // Pulsing power icon with glow
+            Opacity(
+              opacity: 0.4 + 0.5 * breathe,
+              child: Icon(
+                Icons.power_settings_new,
+                size: 44,
+                color: primaryColor,
+                shadows: [
+                  Shadow(
+                    color: primaryColor.withValues(alpha: 0.6 * breathe),
+                    blurRadius: 16,
+                  ),
+                ],
               ),
             ),
           ],
@@ -781,62 +1030,181 @@ class _ConnectingIcon extends StatelessWidget {
   }
 }
 
-class _ArcPainter extends CustomPainter {
+/// Full connecting effect: dual orbit rings, energy particles, pulsing glow halos
+class _ConnectingEffectPainter extends CustomPainter {
+  final double progress;
   final Color color;
-  _ArcPainter({required this.color});
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withValues(alpha: 0.6)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round;
+  static final List<_EnergyParticle> _particles = _genParticles(20);
 
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    canvas.drawArc(rect, 0, math.pi * 0.7, false, paint);
-    canvas.drawArc(rect, math.pi, math.pi * 0.7, false, paint);
+  _ConnectingEffectPainter({required this.progress, required this.color});
+
+  static List<_EnergyParticle> _genParticles(int n) {
+    final rng = math.Random(42);
+    return List.generate(n, (_) => _EnergyParticle(
+      angle: rng.nextDouble() * math.pi * 2,
+      radius: 0.42 + rng.nextDouble() * 0.12,
+      speed: 0.6 + rng.nextDouble() * 0.8,
+      size: 1.0 + rng.nextDouble() * 1.8,
+      phase: rng.nextDouble() * math.pi * 2,
+      brightness: 0.3 + rng.nextDouble() * 0.7,
+    ));
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _OrbitingDotsPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final int dotCount;
-
-  _OrbitingDotsPainter({
-    required this.progress,
-    required this.color,
-    this.dotCount = 3,
-  });
-
-  @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final r = size.width / 2;
+    final t = progress;
+    final paint = Paint();
 
-    for (int i = 0; i < dotCount; i++) {
-      final angle = (progress * math.pi * 2) + (i * math.pi * 2 / dotCount);
-      final dotX = center.dx + radius * math.cos(angle);
-      final dotY = center.dy + radius * math.sin(angle);
+    // ─── 1. Pulsing glow halo ───
+    final pulse = 0.6 + 0.4 * math.sin(t * math.pi * 2);
+    paint
+      ..shader = RadialGradient(
+        colors: [
+          color.withValues(alpha: 0.08 * pulse),
+          color.withValues(alpha: 0.0),
+        ],
+      ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: r * 1.1))
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(cx, cy), r * 1.1, paint);
+    paint.shader = null;
 
-      final dotAlpha = 0.3 + 0.7 * ((math.sin(progress * math.pi * 2 + i * 1.5) + 1) / 2);
-      final dotSize = 3.0 + 2.0 * ((math.sin(progress * math.pi * 2 + i * 2.0) + 1) / 2);
+    // ─── 2. Outer orbit ring (slow, reverse) ───
+    _drawOrbitRing(canvas, cx, cy, r * 0.97, t, 4, reverse: true,
+        alpha: 0.25, trailLength: 0.12, dotSize: 2.5);
 
-      final paint = Paint()
-        ..color = color.withValues(alpha: dotAlpha)
+    // ─── 3. Inner orbit ring (fast) ───
+    _drawOrbitRing(canvas, cx, cy, r * 0.82, t * 1.4, 3, reverse: false,
+        alpha: 0.45, trailLength: 0.18, dotSize: 3.0);
+
+    // ─── 4. Energy particles floating between rings ───
+    for (final p in _particles) {
+      final angle = p.angle + t * p.speed * math.pi * 2;
+      final radOsc = p.radius * r + math.sin(t * math.pi * 4 + p.phase) * r * 0.04;
+      final px = cx + radOsc * math.cos(angle);
+      final py = cy + radOsc * math.sin(angle);
+      final a = p.brightness * (0.4 + 0.6 * ((math.sin(t * math.pi * 6 + p.phase) + 1) / 2));
+      paint
+        ..color = color.withValues(alpha: a)
         ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(px, py), p.size, paint);
+    }
 
-      canvas.drawCircle(Offset(dotX, dotY), dotSize, paint);
+    // ─── 5. Corner accent flares ───
+    for (int i = 0; i < 4; i++) {
+      final flareAngle = (t * math.pi * 0.8) + (i * math.pi / 2);
+      final fx = cx + r * 0.9 * math.cos(flareAngle);
+      final fy = cy + r * 0.9 * math.sin(flareAngle);
+      final flareAlpha = 0.12 + 0.18 * math.sin(t * math.pi * 4 + i * 1.5).abs();
+      paint
+        ..shader = RadialGradient(
+          colors: [
+            color.withValues(alpha: flareAlpha),
+            color.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromCircle(center: Offset(fx, fy), radius: 8))
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(fx, fy), 8, paint);
+      paint.shader = null;
+    }
+  }
+
+  void _drawOrbitRing(Canvas canvas, double cx, double cy, double radius,
+      double t, int count, {
+        required bool reverse,
+        required double alpha,
+        required double trailLength,
+        required double dotSize,
+      }) {
+    final paint = Paint()..style = PaintingStyle.fill;
+    final dir = reverse ? -1.0 : 1.0;
+
+    for (int i = 0; i < count; i++) {
+      final baseAngle = dir * t * math.pi * 2 + (i * math.pi * 2 / count);
+
+      // Trail segments
+      for (int s = 0; s < 6; s++) {
+        final trailOffset = s * trailLength / 6;
+        final angle = baseAngle - dir * trailOffset;
+        final dx = cx + radius * math.cos(angle);
+        final dy = cy + radius * math.sin(angle);
+        final trailAlpha = alpha * (1.0 - s / 6.0);
+        final trailSize = dotSize * (1.0 - s * 0.12);
+        paint.color = color.withValues(alpha: trailAlpha);
+        canvas.drawCircle(Offset(dx, dy), trailSize, paint);
+      }
+
+      // Main dot with glow
+      final angle = baseAngle;
+      final dx = cx + radius * math.cos(angle);
+      final dy = cy + radius * math.sin(angle);
+      paint
+        ..shader = RadialGradient(
+          colors: [
+            color.withValues(alpha: alpha * 1.2),
+            color.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromCircle(center: Offset(dx, dy), radius: dotSize * 3))
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(dx, dy), dotSize * 3, paint);
+      paint.shader = null;
+      paint.color = color.withValues(alpha: alpha);
+      canvas.drawCircle(Offset(dx, dy), dotSize, paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _OrbitingDotsPainter oldDelegate) =>
-      oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _ConnectingEffectPainter old) =>
+      old.progress != progress;
+}
+
+class _EnergyParticle {
+  final double angle, radius, speed, size, phase, brightness;
+  const _EnergyParticle({
+    required this.angle, required this.radius, required this.speed,
+    required this.size, required this.phase, required this.brightness,
+  });
+}
+
+/// Dashed plasma ring drawn inside the connecting button
+class _PlasmaRingPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final double strokeWidth;
+  final int dashCount;
+
+  _PlasmaRingPainter({
+    required this.progress,
+    required this.color,
+    required this.strokeWidth,
+    required this.dashCount,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    final dashArc = (math.pi * 2 / dashCount) * 0.6;
+    final gapArc = (math.pi * 2 / dashCount) * 0.4;
+
+    for (int i = 0; i < dashCount; i++) {
+      final startAngle = i * (dashArc + gapArc);
+      final alpha = 0.2 + 0.5 * ((math.sin(progress * math.pi * 4 + i * 0.8) + 1) / 2);
+      paint.color = color.withValues(alpha: alpha);
+      canvas.drawArc(rect, startAngle, dashArc, false, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PlasmaRingPainter old) =>
+      old.progress != progress;
 }
 
 class _ModeSelector extends StatelessWidget {
@@ -1023,7 +1391,7 @@ class _AnnounceBanner extends ConsumerWidget {
 // Subscription info card with animated border on refresh
 class _SubscriptionCard extends ConsumerStatefulWidget {
   final Color primaryColor;
-  const _SubscriptionCard({required this.primaryColor});
+  const _SubscriptionCard({super.key, required this.primaryColor});
 
   @override
   ConsumerState<_SubscriptionCard> createState() => _SubscriptionCardState();
@@ -2159,7 +2527,7 @@ class _IsolatedScrollListState extends State<_IsolatedScrollList> {
           child: ListView.builder(
             controller: _controller,
             padding: const EdgeInsets.symmetric(vertical: 4),
-            physics: const BouncingScrollPhysics(),
+            physics: const ClampingScrollPhysics(),
             itemCount: widget.itemCount,
             itemBuilder: widget.itemBuilder,
           ),

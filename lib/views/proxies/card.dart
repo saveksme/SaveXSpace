@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/services.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -82,7 +83,10 @@ class _ProxyCardState extends State<ProxyCard> {
         final isSelected = selectedProxyName == widget.proxy.name;
 
         return GestureDetector(
-          onTap: () => _changeProxy(ref),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            _changeProxy(ref);
+          },
           onTapDown: (_) => setState(() => _pressed = true),
           onTapUp: (_) => setState(() => _pressed = false),
           onTapCancel: () => setState(() => _pressed = false),

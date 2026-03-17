@@ -1,5 +1,6 @@
 import 'package:fl_clash/common/common.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'builder.dart';
 
@@ -30,7 +31,12 @@ class CommonFloatingActionButton extends StatelessWidget {
           return FloatingActionButton.extended(
             heroTag: null,
             icon: icon,
-            onPressed: onPressed,
+            onPressed: onPressed != null
+                ? () {
+                    HapticFeedback.lightImpact();
+                    onPressed!();
+                  }
+                : null,
             isExtended: true,
             label: AnimatedSize(
               alignment: Alignment.centerLeft,

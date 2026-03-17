@@ -1,5 +1,6 @@
 import 'package:fl_clash/enum/enum.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class CommonChip extends StatelessWidget {
   final String label;
@@ -28,7 +29,10 @@ class CommonChip extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        onDeleted: onPressed ?? () {},
+        onDeleted: () {
+          HapticFeedback.selectionClick();
+          (onPressed ?? () {})();
+        },
         labelStyle: labelStyle,
         label: Text(label),
       );
@@ -41,7 +45,10 @@ class CommonChip extends StatelessWidget {
         vertical: 0,
         horizontal: 4,
       ),
-      onPressed: onPressed ?? () {},
+      onPressed: () {
+        HapticFeedback.selectionClick();
+        (onPressed ?? () {})();
+      },
       labelStyle: labelStyle,
       label: Text(label),
     );
