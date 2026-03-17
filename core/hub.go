@@ -7,7 +7,7 @@ import (
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
 	"github.com/metacubex/mihomo/common/observable"
-	"github.com/metacubex/mihomo/common/utils"
+	"github.com/metacubex/mihomo/component/dialer"
 	"github.com/metacubex/mihomo/component/mmdb"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/component/updater"
@@ -224,15 +224,6 @@ func handleAsyncTestDelay(paramsString string, fn func(string)) {
 			return false, nil
 		}
 
-		expectedStatus, err := utils.NewUnsignedRanges[uint16]("")
-		if err != nil {
-			fn("")
-			return false, nil
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(params.Timeout))
-		defer cancel()
-
 		proxies := tunnel.ProxiesWithProviders()
 		proxy := proxies[params.ProxyName]
 
@@ -248,26 +239,47 @@ func handleAsyncTestDelay(paramsString string, fn func(string)) {
 		}
 
 		testUrl := constant.DefaultTestURL
-
 		if params.TestUrl != "" {
 			testUrl = params.TestUrl
 		}
 		delayData.Url = testUrl
 
-		delay, err := proxy.URLTest(ctx, testUrl, expectedStatus)
-		if err != nil || delay == 0 {
+		// Direct TCP connect to the proxy server bypassing TUN/VPN
+		addr := proxy.Addr()
+		if addr == "" {
 			delayData.Value = -1
 			data, _ := json.Marshal(delayData)
 			fn(string(data))
 			return false, nil
 		}
 
-		delayData.Value = int32(delay)
+		timeout := time.Millisecond * time.Duration(params.Timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		start := time.Now()
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
+		elapsed := time.Since(start)
+
+		if err != nil {
+			delayData.Value = -1
+			data, _ := json.Marshal(delayData)
+			fn(string(data))
+			return false, nil
+		}
+		conn.Close()
+
+		delayMs := int32(elapsed.Milliseconds())
+		if delayMs == 0 {
+			delayMs = 1
+		}
+		delayData.Value = delayMs
 		data, _ := json.Marshal(delayData)
 		fn(string(data))
 		return false, nil
 	})
 }
+
 
 func handleGetConnections() string {
 	runLock.Lock()

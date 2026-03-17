@@ -112,21 +112,26 @@ class _DashboardViewState extends ConsumerState<DashboardView>
     }, duration: commonDuration);
   }
 
-  Future<void> _handleRefresh() async {
-    if (_isRefreshing) return;
+  Future<bool> _handleRefresh() async {
+    if (_isRefreshing) return true;
     setState(() => _isRefreshing = true);
     HapticFeedback.mediumImpact();
     _subscriptionCardKey.currentState?._onRefreshStart();
+    bool success = false;
     try {
       final profileId = ref.read(currentProfileIdProvider);
       final profiles = ref.read(profilesProvider);
       final profile = profiles.getProfile(profileId);
       if (profile != null) {
         await appController.updateProfile(profile, showLoading: true);
+        success = true;
       }
-    } catch (_) {}
-    _subscriptionCardKey.currentState?._onRefreshEnd();
+    } catch (_) {
+      success = false;
+    }
+    _subscriptionCardKey.currentState?._onRefreshEnd(success: success);
     setState(() => _isRefreshing = false);
+    return success;
   }
 
   @override
@@ -406,7 +411,7 @@ class _BlurRevealCard extends StatelessWidget {
 
 class _VortexRefresh extends StatefulWidget {
   final Widget child;
-  final Future<void> Function() onRefresh;
+  final Future<bool> Function() onRefresh;
   final Color color;
 
   const _VortexRefresh({
@@ -429,6 +434,7 @@ class _VortexRefreshState extends State<_VortexRefresh>
   late AnimationController _successController;
   double _snapFrom = 0.0;
   bool _showSuccess = false;
+  bool _refreshFailed = false;
 
   static const _threshold = 80.0;
   static const _maxDrag = 140.0;
@@ -500,11 +506,12 @@ class _VortexRefreshState extends State<_VortexRefresh>
       _dragOffset = _restHeight;
     });
     _spinController.repeat();
-    await widget.onRefresh();
+    final success = await widget.onRefresh();
     _spinController.stop();
     setState(() {
       _isRefreshing = false;
       _showSuccess = true;
+      _refreshFailed = !success;
     });
     HapticFeedback.lightImpact();
     _successController.forward(from: 0.0);
@@ -540,7 +547,9 @@ class _VortexRefreshState extends State<_VortexRefresh>
                       sweep: pullProgress,
                       spin: _spinController.value,
                       color: _showSuccess
-                          ? Color.lerp(widget.color, const Color(0xFF4ADE80), 1.0)!
+                          ? (_refreshFailed
+                              ? const Color(0xFFF87171)
+                              : Color.lerp(widget.color, const Color(0xFF4ADE80), 1.0)!)
                           : widget.color,
                       isSpinning: _isRefreshing,
                       fadeOut: _showSuccess ? _successController.value : 0.0,
@@ -1438,7 +1447,9 @@ class _SubscriptionCardState extends ConsumerState<_SubscriptionCard>
     _borderController.repeat();
   }
 
-  void _onRefreshEnd() {
+  bool _refreshFailed = false;
+
+  void _onRefreshEnd({bool success = true}) {
     _borderController.stop();
     _borderController.animateTo(1.0, duration: const Duration(milliseconds: 300))
       .then((_) {
@@ -1447,6 +1458,7 @@ class _SubscriptionCardState extends ConsumerState<_SubscriptionCard>
           setState(() {
             _isRefreshing = false;
             _showSuccess = true;
+            _refreshFailed = !success;
           });
           _successController.forward(from: 0.0);
         }
@@ -1475,7 +1487,9 @@ class _SubscriptionCardState extends ConsumerState<_SubscriptionCard>
         } else if (_showSuccess) {
           painter = _SuccessBorderPainter(
             progress: _successController.value,
-            color: const Color(0xFF34D399),
+            color: _refreshFailed
+                ? const Color(0xFFF87171)   // red on failure
+                : const Color(0xFF34D399),  // green on success
             borderRadius: 14,
           );
         }
@@ -1710,7 +1724,7 @@ class _RefreshButton extends StatefulWidget {
   final Color primaryColor;
   final Profile profile;
   final VoidCallback? onRefreshStart;
-  final VoidCallback? onRefreshEnd;
+  final void Function({bool success})? onRefreshEnd;
   const _RefreshButton({
     required this.primaryColor,
     required this.profile,
@@ -1747,14 +1761,16 @@ class _RefreshButtonState extends State<_RefreshButton>
     setState(() => _isRefreshing = true);
     _spinController.repeat();
     widget.onRefreshStart?.call();
+    bool success = false;
     try {
       await appController.updateProfile(widget.profile);
+      success = true;
     } catch (_) {}
     if (mounted) {
       _spinController.stop();
       _spinController.reset();
       setState(() => _isRefreshing = false);
-      widget.onRefreshEnd?.call();
+      widget.onRefreshEnd?.call(success: success);
     }
   }
 
