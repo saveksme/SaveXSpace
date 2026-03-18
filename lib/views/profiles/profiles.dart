@@ -1204,161 +1204,157 @@ class _SaveXParticleDialogState extends State<_SaveXParticleDialog>
                         child: Transform.scale(
                           scale: dialogScale,
                           child: Container(
-                            constraints: const BoxConstraints(maxWidth: 360),
+                            constraints: const BoxConstraints(maxWidth: 340),
                             margin: const EdgeInsets.symmetric(horizontal: 32),
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(24),
-                              gradient: const LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Color(0xFF1A1A2E),
-                                  Color(0xFF0D0D14),
-                                ],
-                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              color: const Color(0xFF0D0D0D),
                               border: Border.all(
-                                color: pc.withValues(alpha: 0.15),
-                                width: 1,
+                                color: const Color(0xFF1A1A1A),
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: pc.withValues(alpha: 0.1),
-                                  blurRadius: 40,
-                                  spreadRadius: 2,
-                                ),
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.4),
-                                  blurRadius: 30,
-                                  spreadRadius: 0,
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  blurRadius: 60,
+                                  spreadRadius: 10,
                                 ),
                               ],
                             ),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(24),
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(32, 36, 32, 24),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Logo
-                                    SizedBox(
-                                      width: 88,
-                                      height: 88,
-                                      child: Stack(
-                                        clipBehavior: Clip.none,
-                                        alignment: Alignment.center,
-                                        children: [
-                                          Positioned.fill(
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(22),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: pc.withValues(alpha: 0.3),
-                                                    blurRadius: 28,
-                                                    spreadRadius: 2,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(22),
-                                            child: Image.asset(
-                                              'assets/images/savex_logo.png',
-                                              width: 80,
-                                              height: 80,
-                                              fit: BoxFit.cover,
-                                            ),
-                                          ),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Top accent line
+                                  Container(
+                                    height: 3,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          pc.withValues(alpha: 0.0),
+                                          pc.withValues(alpha: 0.6),
+                                          pc.withValues(alpha: 0.0),
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(height: 22),
-                                    Row(
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
+                                    child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Text(
-                                          'SaveX',
-                                          style: TextStyle(
-                                            fontFamily: 'SpaceGrotesk',
-                                            fontSize: 22,
-                                            fontWeight: FontWeight.w800,
-                                            color: Colors.white,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
+                                        // Logo
                                         Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 10, vertical: 4),
+                                          width: 56,
+                                          height: 56,
                                           decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(8),
-                                            gradient: LinearGradient(
-                                              colors: [pc, pc.withValues(alpha: 0.7)],
+                                            borderRadius: BorderRadius.circular(16),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: pc.withValues(alpha: 0.15),
+                                                blurRadius: 20,
+                                              ),
+                                            ],
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(16),
+                                            child: Image.asset(
+                                              'assets/images/savex_logo.png',
+                                              width: 56,
+                                              height: 56,
+                                              fit: BoxFit.cover,
                                             ),
                                           ),
-                                          child: const Text(
-                                            'Premium',
-                                            style: TextStyle(
-                                              fontFamily: 'SpaceGrotesk',
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                              color: Colors.white,
-                                              letterSpacing: 0.8,
+                                        ),
+                                        const SizedBox(height: 18),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Text(
+                                              'SaveX',
+                                              style: TextStyle(
+                                                fontFamily: 'SpaceGrotesk',
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.w700,
+                                                color: Colors.white,
+                                                letterSpacing: 0.3,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(6),
+                                                color: pc.withValues(alpha: 0.15),
+                                                border: Border.all(
+                                                  color: pc.withValues(alpha: 0.25),
+                                                  width: 0.5,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                'Premium',
+                                                style: TextStyle(
+                                                  fontFamily: 'SpaceGrotesk',
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: pc,
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 14),
+                                        Text(
+                                          'Спасибо, что вы с нами!',
+                                          style: TextStyle(
+                                            fontFamily: 'SpaceGrotesk',
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.white.withValues(alpha: 0.85),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Вы используете подписку SaveX Premium — это значит, что вы цените качество, скорость и стабильность. Мы рады, что вы выбрали нас.',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.white.withValues(alpha: 0.35),
+                                            height: 1.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: TextButton(
+                                            onPressed: _close,
+                                            style: TextButton.styleFrom(
+                                              backgroundColor: const Color(0xFF151515),
+                                              padding: const EdgeInsets.symmetric(vertical: 12),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                side: const BorderSide(
+                                                  color: Color(0xFF1A1A1A),
+                                                ),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'Отлично!',
+                                              style: TextStyle(
+                                                fontFamily: 'SpaceGrotesk',
+                                                fontWeight: FontWeight.w500,
+                                                color: pc,
+                                                fontSize: 13,
+                                              ),
                                             ),
                                           ),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'Спасибо, что вы с нами!',
-                                      style: TextStyle(
-                                        fontFamily: 'SpaceGrotesk',
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white.withValues(alpha: 0.9),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Text(
-                                      'Вы используете подписку SaveX Premium — это значит, что вы цените качество, скорость и стабильность. Мы рады, что вы выбрали нас.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.white.withValues(alpha: 0.45),
-                                        height: 1.5,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 24),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: TextButton(
-                                        onPressed: _close,
-                                        style: TextButton.styleFrom(
-                                          backgroundColor: pc.withValues(alpha: 0.12),
-                                          padding: const EdgeInsets.symmetric(vertical: 14),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(14),
-                                            side: BorderSide(
-                                              color: pc.withValues(alpha: 0.2),
-                                            ),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          'Отлично!',
-                                          style: TextStyle(
-                                            fontFamily: 'SpaceGrotesk',
-                                            fontWeight: FontWeight.w600,
-                                            color: pc,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

@@ -23,64 +23,7 @@ class HomePage extends StatelessWidget {
           color: context.colorScheme.surface,
           child: Consumer(
             builder: (context, ref, child) {
-              final state = ref.watch(navigationStateProvider);
-              final systemUiOverlayStyle = ref.read(
-                systemUiOverlayStyleStateProvider,
-              );
-              final isMobile = state.viewMode == ViewMode.mobile;
-              final navigationItems = state.navigationItems;
-              final currentIndex = state.currentIndex;
-              final bottomNavigationBar = NavigationBar(
-                height: 64,
-                destinations: navigationItems
-                    .map(
-                      (e) => NavigationDestination(
-                        icon: e.icon,
-                        label: Intl.message(e.label.name),
-                      ),
-                    )
-                    .toList(),
-                labelTextStyle: WidgetStateProperty.all(
-                  const TextStyle(fontFamily: 'SpaceGrotesk', fontSize: 10, letterSpacing: 0.5),
-                ),
-                onDestinationSelected: (index) {
-                  HapticFeedback.selectionClick();
-                  appController.toPage(navigationItems[index].label);
-                },
-                selectedIndex: currentIndex,
-              );
-              if (isMobile) {
-                return AnnotatedRegion<SystemUiOverlayStyle>(
-                  value: systemUiOverlayStyle.copyWith(
-                    systemNavigationBarColor: context.colorScheme.surface,
-                  ),
-                  child: Column(
-                    children: [
-                      Flexible(
-                        flex: 1,
-                        child: MediaQuery.removePadding(
-                          removeTop: false,
-                          removeBottom: true,
-                          removeLeft: true,
-                          removeRight: true,
-                          context: context,
-                          child: child!,
-                        ),
-                      ),
-                      MediaQuery.removePadding(
-                        removeTop: true,
-                        removeBottom: false,
-                        removeLeft: true,
-                        removeRight: true,
-                        context: context,
-                        child: bottomNavigationBar,
-                      ),
-                    ],
-                  ),
-                );
-              } else {
-                return child!;
-              }
+              return child!;
             },
             child: Consumer(
               builder: (_, ref, _) {

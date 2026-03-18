@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/common/scroll.dart';
 import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/common.dart';
@@ -233,7 +234,7 @@ class ProxiesTabViewState extends ConsumerState<ProxiesTabView>
                       ),
                       indicatorPadding: const EdgeInsets.only(bottom: 0),
                       labelColor: Colors.white,
-                      unselectedLabelColor: const Color(0x40FFFFFF),
+                      unselectedLabelColor: const Color(0x99FFFFFF),
                       labelStyle: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -324,7 +325,7 @@ class ProxyGroupView extends ConsumerStatefulWidget {
 
 class _ProxyGroupViewState extends ConsumerState<ProxyGroupView>
     with AutomaticKeepAliveClientMixin {
-  late final ScrollController _controller;
+  late final SmoothScrollController _controller;
 
   List<Proxy> currentProxies = [];
   String? testUrl;
@@ -335,7 +336,7 @@ class _ProxyGroupViewState extends ConsumerState<ProxyGroupView>
   @override
   void initState() {
     super.initState();
-    _controller = ScrollController();
+    _controller = SmoothScrollController();
   }
 
   PageStorageKey _getPageStorageKey() {
@@ -387,36 +388,34 @@ class _ProxyGroupViewState extends ConsumerState<ProxyGroupView>
         : group.all.toList();
     testUrl = group.testUrl;
     currentProxies = proxies;
-    return CommonScrollBar(
+    return GridView.builder(
+      key: _getPageStorageKey(),
       controller: _controller,
-      child: GridView.builder(
-        key: _getPageStorageKey(),
-        controller: _controller,
-        padding: const EdgeInsets.only(
-          top: 8,
-          left: 16,
-          right: 16,
-          bottom: 96,
-        ),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 1,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 0,
-          mainAxisExtent: 64,
-        ),
-        itemCount: currentProxies.length,
-        itemBuilder: (_, index) {
-          final proxy = currentProxies[index];
-          return ProxyCard(
-            testUrl: group.testUrl,
-            groupType: group.type,
-            type: widget.cardType,
-            proxy: proxy,
-            groupName: group.name,
-            index: index,
-          );
-        },
+      physics: const ClampingScrollPhysics(),
+      padding: const EdgeInsets.only(
+        top: 8,
+        left: 16,
+        right: 16,
+        bottom: 96,
       ),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 1,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 0,
+        mainAxisExtent: 64,
+      ),
+      itemCount: currentProxies.length,
+      itemBuilder: (_, index) {
+        final proxy = currentProxies[index];
+        return ProxyCard(
+          testUrl: group.testUrl,
+          groupType: group.type,
+          type: widget.cardType,
+          proxy: proxy,
+          groupName: group.name,
+          index: index,
+        );
+      },
     );
   }
 }

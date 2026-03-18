@@ -146,13 +146,13 @@ class MessageLookup extends MessageLookupByLibrary {
     "autoCloseConnectionsDesc": MessageLookupByLibrary.simpleMessage(
       "Автоматически закрывать соединения после смены узла",
     ),
-    "autoLaunch": MessageLookupByLibrary.simpleMessage("Автозапуск"),
+    "autoLaunch": MessageLookupByLibrary.simpleMessage("Автозапуск приложения"),
     "autoLaunchDesc": MessageLookupByLibrary.simpleMessage(
-      "Следовать автозапуску системы",
+      "Автоматически открывать приложение при запуске устройства",
     ),
-    "autoRun": MessageLookupByLibrary.simpleMessage("Автозапуск"),
+    "autoRun": MessageLookupByLibrary.simpleMessage("Автоматическое подключение к серверу"),
     "autoRunDesc": MessageLookupByLibrary.simpleMessage(
-      "Автоматический запуск при открытии приложения",
+      "Автоматический запуск VPN при открытии приложения",
     ),
     "autoSetSystemDns": MessageLookupByLibrary.simpleMessage(
       "Автоматическая настройка системного DNS",
@@ -500,7 +500,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Свернуть при выходе",
     ),
     "minimizeOnExitDesc": MessageLookupByLibrary.simpleMessage(
-      "Изменить стандартное событие выхода из системы",
+      "Автоматическое сворачивание в трей при закрытии приложения",
     ),
     "minutes": MessageLookupByLibrary.simpleMessage("Минут"),
     "minutesAgo": m7,
@@ -790,7 +790,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "shrink": MessageLookupByLibrary.simpleMessage("Сжать"),
     "silentLaunch": MessageLookupByLibrary.simpleMessage("Тихий запуск"),
     "silentLaunchDesc": MessageLookupByLibrary.simpleMessage(
-      "Запуск в фоновом режиме",
+      "При запуске автоматически скрывать приложение в трей",
     ),
     "size": MessageLookupByLibrary.simpleMessage("Размер"),
     "socksPort": MessageLookupByLibrary.simpleMessage("Socks-порт"),

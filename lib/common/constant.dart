@@ -34,7 +34,7 @@ const watchExecution = true;
 
 final defaultTextScaleFactor =
     WidgetsBinding.instance.platformDispatcher.textScaleFactor;
-const httpTimeoutDuration = Duration(milliseconds: 5000);
+const httpTimeoutDuration = Duration(milliseconds: 2000);
 const moreDuration = Duration(milliseconds: 100);
 const animateDuration = Duration(milliseconds: 100);
 const midDuration = Duration(milliseconds: 200);

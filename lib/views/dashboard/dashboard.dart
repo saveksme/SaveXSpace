@@ -1216,7 +1216,7 @@ class _PlasmaRingPainter extends CustomPainter {
       old.progress != progress;
 }
 
-class _ModeSelector extends StatelessWidget {
+class _ModeSelector extends StatefulWidget {
   final Mode currentMode;
   final ValueChanged<Mode> onModeChanged;
   final Color primaryColor;
@@ -1228,43 +1228,114 @@ class _ModeSelector extends StatelessWidget {
   });
 
   @override
+  State<_ModeSelector> createState() => _ModeSelectorState();
+}
+
+class _ModeSelectorState extends State<_ModeSelector>
+    with SingleTickerProviderStateMixin {
+  static const _modes = [Mode.rule, Mode.global];
+  late AnimationController _slideController;
+  late Animation<double> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _slideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+      value: _modes.indexOf(widget.currentMode).clamp(0, 1).toDouble(),
+    );
+    _slideAnimation = CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  void didUpdateWidget(_ModeSelector old) {
+    super.didUpdateWidget(old);
+    if (old.currentMode != widget.currentMode) {
+      final idx = _modes.indexOf(widget.currentMode).clamp(0, 1);
+      _slideController.animateTo(idx.toDouble());
+    }
+  }
+
+  @override
+  void dispose() {
+    _slideController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final pc = widget.primaryColor;
+
     return Container(
-      padding: const EdgeInsets.all(4),
+      height: 48,
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFF111111),
+        color: const Color(0xFF0D0D0D),
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF1A1A1A)),
       ),
-      child: Row(
-        children: Mode.values.map((mode) {
-          final isSelected = mode == currentMode;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onModeChanged(mode),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOut,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: isSelected ? primaryColor.withValues(alpha: 0.15) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(11),
-                  border: isSelected ? Border.all(color: primaryColor.withValues(alpha: 0.3), width: 1) : null,
-                ),
-                child: Center(
-                  child: Text(
-                    Intl.message(mode.name),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                      color: isSelected ? primaryColor : Colors.white38,
-                      letterSpacing: 0.3,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final halfW = constraints.maxWidth / 2;
+
+          return Stack(
+            children: [
+              // Sliding thumb
+              AnimatedBuilder(
+                animation: _slideAnimation,
+                builder: (context, _) {
+                  return Positioned(
+                    left: _slideAnimation.value * halfW,
+                    top: 0,
+                    bottom: 0,
+                    width: halfW,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: pc.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(
+                          color: pc.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
-            ),
+              // Labels
+              Row(
+                children: _modes.map((mode) {
+                  final isSelected = mode == widget.currentMode;
+                  return Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        widget.onModeChanged(mode);
+                      },
+                      child: Center(
+                        child: AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 200),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                            color: isSelected ? pc : Colors.white38,
+                            letterSpacing: 0.3,
+                          ),
+                          child: Text(Intl.message(mode.name)),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           );
-        }).toList(),
+        },
       ),
     );
   }
