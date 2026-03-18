@@ -1216,7 +1216,7 @@ class _PlasmaRingPainter extends CustomPainter {
       old.progress != progress;
 }
 
-class _ModeSelector extends StatefulWidget {
+class _ModeSelector extends StatelessWidget {
   final Mode currentMode;
   final ValueChanged<Mode> onModeChanged;
   final Color primaryColor;
@@ -1228,114 +1228,192 @@ class _ModeSelector extends StatefulWidget {
   });
 
   @override
-  State<_ModeSelector> createState() => _ModeSelectorState();
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ModeCard(
+            icon: Icons.alt_route_rounded,
+            label: Intl.message(Mode.rule.name),
+            subtitle: 'Умная маршрутизация',
+            isSelected: currentMode == Mode.rule,
+            primaryColor: primaryColor,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onModeChanged(Mode.rule);
+            },
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _ModeCard(
+            icon: Icons.language_rounded,
+            label: Intl.message(Mode.global.name),
+            subtitle: 'Весь трафик через прокси',
+            isSelected: currentMode == Mode.global,
+            primaryColor: primaryColor,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onModeChanged(Mode.global);
+            },
+          ),
+        ),
+      ],
+    );
+  }
 }
 
-class _ModeSelectorState extends State<_ModeSelector>
+class _ModeCard extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final bool isSelected;
+  final Color primaryColor;
+  final VoidCallback onTap;
+
+  const _ModeCard({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.isSelected,
+    required this.primaryColor,
+    required this.onTap,
+  });
+
+  @override
+  State<_ModeCard> createState() => _ModeCardState();
+}
+
+class _ModeCardState extends State<_ModeCard>
     with SingleTickerProviderStateMixin {
-  static const _modes = [Mode.rule, Mode.global];
-  late AnimationController _slideController;
-  late Animation<double> _slideAnimation;
+  late AnimationController _bounceController;
+  bool _pressed = false;
 
   @override
   void initState() {
     super.initState();
-    _slideController = AnimationController(
+    _bounceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
-      value: _modes.indexOf(widget.currentMode).clamp(0, 1).toDouble(),
-    );
-    _slideAnimation = CurvedAnimation(
-      parent: _slideController,
-      curve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 350),
     );
   }
 
   @override
-  void didUpdateWidget(_ModeSelector old) {
+  void didUpdateWidget(_ModeCard old) {
     super.didUpdateWidget(old);
-    if (old.currentMode != widget.currentMode) {
-      final idx = _modes.indexOf(widget.currentMode).clamp(0, 1);
-      _slideController.animateTo(idx.toDouble());
+    if (!old.isSelected && widget.isSelected) {
+      _bounceController.forward(from: 0.0);
     }
   }
 
   @override
   void dispose() {
-    _slideController.dispose();
+    _bounceController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final pc = widget.primaryColor;
+    final sel = widget.isSelected;
 
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D0D),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1A1A1A)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final halfW = constraints.maxWidth / 2;
-
-          return Stack(
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          height: 72,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: sel
+                ? pc.withValues(alpha: 0.08)
+                : const Color(0xFF0D0D0D),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: sel
+                  ? pc.withValues(alpha: 0.35)
+                  : const Color(0xFF1A1A1A),
+            ),
+            boxShadow: sel
+                ? [
+                    BoxShadow(
+                      color: pc.withValues(alpha: 0.08),
+                      blurRadius: 16,
+                      spreadRadius: -2,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
             children: [
-              // Sliding thumb
-              AnimatedBuilder(
-                animation: _slideAnimation,
-                builder: (context, _) {
-                  return Positioned(
-                    left: _slideAnimation.value * halfW,
-                    top: 0,
-                    bottom: 0,
-                    width: halfW,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: pc.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(11),
-                        border: Border.all(
-                          color: pc.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                  );
-                },
+              // Icon circle
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: sel
+                      ? pc.withValues(alpha: 0.15)
+                      : const Color(0xFF151515),
+                  border: Border.all(
+                    color: sel
+                        ? pc.withValues(alpha: 0.3)
+                        : const Color(0xFF1A1A1A),
+                    width: 1,
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    widget.icon,
+                    size: 18,
+                    color: sel ? pc : Colors.white24,
+                  ),
+                ),
               ),
-              // Labels
-              Row(
-                children: _modes.map((mode) {
-                  final isSelected = mode == widget.currentMode;
-                  return Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        widget.onModeChanged(mode);
-                      },
-                      child: Center(
-                        child: AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 200),
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                            color: isSelected ? pc : Colors.white38,
-                            letterSpacing: 0.3,
-                          ),
-                          child: Text(Intl.message(mode.name)),
-                        ),
+              const SizedBox(width: 10),
+              // Text column
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 200),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
+                        color: sel ? Colors.white : Colors.white38,
+                        letterSpacing: -0.1,
+                      ),
+                      child: Text(widget.label),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: sel
+                            ? pc.withValues(alpha: 0.6)
+                            : const Color(0xFF444444),
+                        letterSpacing: 0.1,
                       ),
                     ),
-                  );
-                }).toList(),
+                  ],
+                ),
               ),
             ],
-          );
-        },
+          ),
+        ),
       ),
     );
   }

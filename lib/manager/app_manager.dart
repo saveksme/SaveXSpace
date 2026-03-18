@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
@@ -10,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:window_manager/window_manager.dart';
 
 class AppStateManager extends ConsumerStatefulWidget {
   final Widget child;
@@ -145,6 +147,12 @@ class _AppSidebarContainerState extends ConsumerState<AppSidebarContainer> {
     final currentIndex = navigationState.currentIndex;
     final primaryColor = context.colorScheme.primary;
 
+    // On Windows, the window with hidden title bar can extend behind the
+    // taskbar when maximized. Use viewPadding to detect system insets.
+    // If Flutter reports 0, check if the window bottom edge is near the
+    // screen bottom and add safety padding.
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
+
     return Column(
       children: [
         Expanded(child: widget.child),
@@ -153,12 +161,14 @@ class _AppSidebarContainerState extends ConsumerState<AppSidebarContainer> {
           currentIndex: currentIndex,
           primaryColor: primaryColor,
           surfaceColor: context.colorScheme.onSurface,
-          bgColor: context.colorScheme.surfaceContainer,
+          bgColor: const Color(0xFF050505),
           onTap: (index) {
             HapticFeedback.selectionClick();
             appController.toPage(navigationItems[index].label);
           },
         ),
+        if (bottomInset > 0)
+          SizedBox(height: bottomInset),
       ],
     );
   }
@@ -197,7 +207,7 @@ class _BottomNavBarState extends State<_BottomNavBar>
   double _startLeft = 0;
   double _startRight = 0;
 
-  static const _pillWidthFraction = 0.65; // pill = 65% of slot width
+  static const _pillFixedWidth = 56.0; // fixed pill width in pixels
 
   @override
   void initState() {
@@ -214,10 +224,10 @@ class _BottomNavBarState extends State<_BottomNavBar>
   void _setPillToIndex(int index) {
     final n = widget.items.length;
     if (n == 0) return;
+    // Store just the normalized center position
     final center = (index + 0.5) / n;
-    final half = (0.5 / n) * _pillWidthFraction;
-    _pillLeft = center - half;
-    _pillRight = center + half;
+    _pillLeft = center;
+    _pillRight = center;
     _startLeft = _pillLeft;
     _startRight = _pillRight;
     _targetLeft = _pillLeft;
@@ -229,12 +239,11 @@ class _BottomNavBarState extends State<_BottomNavBar>
     if (n == 0) return;
     final fromCenter = (from + 0.5) / n;
     final toCenter = (to + 0.5) / n;
-    final half = (0.5 / n) * _pillWidthFraction;
 
-    _startLeft = fromCenter - half;
-    _startRight = fromCenter + half;
-    _targetLeft = toCenter - half;
-    _targetRight = toCenter + half;
+    _startLeft = fromCenter;
+    _startRight = fromCenter;
+    _targetLeft = toCenter;
+    _targetRight = toCenter;
 
     _controller.forward(from: 0.0);
   }
@@ -243,22 +252,29 @@ class _BottomNavBarState extends State<_BottomNavBar>
     final t = _controller.value;
     final movingRight = _targetLeft > _startLeft;
 
-    // Leading edge: Interval(0.0, 0.75) — starts fast
-    // Trailing edge: Interval(0.25, 1.0) — starts delayed → stretch effect
+    // Leading edge moves first, trailing delays → pill stretches then snaps
     final leadingT = Curves.easeOutCubic.transform(
-      ((t) / 0.75).clamp(0.0, 1.0),
+      (t / 0.75).clamp(0.0, 1.0),
     );
     final trailingT = Curves.easeOutCubic.transform(
       ((t - 0.25) / 0.75).clamp(0.0, 1.0),
     );
 
+    // Animate the CENTER positions of leading and trailing edges
+    final leadingCenter = movingRight
+        ? _startLeft + (_targetLeft - _startLeft) * leadingT
+        : _startLeft + (_targetLeft - _startLeft) * leadingT;
+    final trailingCenter = movingRight
+        ? _startRight + (_targetRight - _startRight) * trailingT
+        : _startRight + (_targetRight - _startRight) * trailingT;
+
     setState(() {
       if (movingRight) {
-        _pillLeft = _startLeft + (_targetLeft - _startLeft) * trailingT;
-        _pillRight = _startRight + (_targetRight - _startRight) * leadingT;
+        _pillLeft = trailingCenter;  // trailing (left) delays
+        _pillRight = leadingCenter;  // leading (right) goes first
       } else {
-        _pillLeft = _startLeft + (_targetLeft - _startLeft) * leadingT;
-        _pillRight = _startRight + (_targetRight - _startRight) * trailingT;
+        _pillLeft = leadingCenter;   // leading (left) goes first
+        _pillRight = trailingCenter; // trailing (right) delays
       }
     });
   }
@@ -280,12 +296,12 @@ class _BottomNavBarState extends State<_BottomNavBar>
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
     return Container(
-      height: 64,
-      color: widget.bgColor,
-      child: SafeArea(
-        top: false,
-        child: Stack(
+      height: 64 + bottomPadding,
+      padding: EdgeInsets.only(bottom: bottomPadding),
+      color: const Color(0xFF050505),
+      child: Stack(
           children: [
             // Stretching pill
             Positioned.fill(
@@ -293,9 +309,10 @@ class _BottomNavBarState extends State<_BottomNavBar>
                 painter: _PillPainter(
                   pillLeft: _pillLeft,
                   pillRight: _pillRight,
-                  pillColor: widget.primaryColor.withValues(alpha: 0.12),
-                  pillHeight: 40,
-                  pillRadius: 20,
+                  pillColor: widget.primaryColor.withValues(alpha: 0.15),
+                  pillFixedWidth: _pillFixedWidth,
+                  pillHeight: 32,
+                  pillRadius: 16,
                   barHeight: 64,
                 ),
               ),
@@ -346,16 +363,18 @@ class _BottomNavBarState extends State<_BottomNavBar>
             ),
           ],
         ),
-      ),
     );
   }
 }
 
 /// Paints the stretching pill behind nav items.
+/// pillLeft/pillRight are normalized center positions (0.0-1.0).
+/// During animation they diverge to create stretch effect.
 class _PillPainter extends CustomPainter {
   final double pillLeft;
   final double pillRight;
   final Color pillColor;
+  final double pillFixedWidth;
   final double pillHeight;
   final double pillRadius;
   final double barHeight;
@@ -364,6 +383,7 @@ class _PillPainter extends CustomPainter {
     required this.pillLeft,
     required this.pillRight,
     required this.pillColor,
+    required this.pillFixedWidth,
     required this.pillHeight,
     required this.pillRadius,
     required this.barHeight,
@@ -371,9 +391,14 @@ class _PillPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final left = pillLeft * size.width;
-    final right = pillRight * size.width;
-    final top = (barHeight - pillHeight) / 2 - 2;
+    final halfW = pillFixedWidth / 2;
+    // Convert normalized centers to pixel positions
+    final leftCenter = pillLeft * size.width;
+    final rightCenter = pillRight * size.width;
+    // Left edge = leftmost center - half, Right edge = rightmost center + half
+    final left = leftCenter - halfW;
+    final right = rightCenter + halfW;
+    final top = (barHeight - pillHeight) / 2 - 8;
     final rect = RRect.fromLTRBR(
       left, top, right, top + pillHeight, Radius.circular(pillRadius),
     );
