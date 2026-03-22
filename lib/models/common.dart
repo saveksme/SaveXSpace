@@ -325,7 +325,11 @@ extension GroupExt on Group {
     if (type.isComputedSelected) {
       return realNow.isNotEmpty ? realNow : proxyName;
     }
-    return proxyName.isNotEmpty ? proxyName : realNow;
+    final result = proxyName.isNotEmpty ? proxyName : realNow;
+    // For Selector groups: DIRECT/REJECT mean "no server selected"
+    final upper = result.toUpperCase().trim();
+    if (upper == 'DIRECT' || upper == 'REJECT') return '';
+    return result;
   }
 }
 

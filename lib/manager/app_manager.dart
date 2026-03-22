@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/models/common.dart';
+import 'package:fl_clash/pages/home.dart' show pageScrollNotifier;
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:flutter/foundation.dart';
@@ -198,99 +199,142 @@ class _BottomNavBar extends StatefulWidget {
 
 class _BottomNavBarState extends State<_BottomNavBar>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late int _prevIndex;
   double _pillLeft = 0;
   double _pillRight = 0;
-  double _targetLeft = 0;
-  double _targetRight = 0;
+  bool _isTapAnimating = false;
+  int? _targetIndex; // stable target during tap animation (ignores intermediate page changes)
+
+  // For tap stretch animation
+  late AnimationController _tapController;
   double _startLeft = 0;
   double _startRight = 0;
+  double _targetLeft = 0;
+  double _targetRight = 0;
 
-  static const _pillFixedWidth = 56.0; // fixed pill width in pixels
+  static const _pillFixedWidth = 56.0;
 
   @override
   void initState() {
     super.initState();
-    _prevIndex = widget.currentIndex;
-    _controller = AnimationController(
+    _tapController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 350),
-    )..addListener(_updatePill);
-    // Initialize pill position
-    _setPillToIndex(widget.currentIndex);
+    )..addListener(_updateTapPill)
+     ..addStatusListener(_onTapAnimationStatus);
+    _setPillSnap(widget.currentIndex);
+    pageScrollNotifier.addListener(_onPageScroll);
   }
 
-  void _setPillToIndex(int index) {
+  void _setPillSnap(int index) {
     final n = widget.items.length;
     if (n == 0) return;
-    // Store just the normalized center position
     final center = (index + 0.5) / n;
     _pillLeft = center;
     _pillRight = center;
-    _startLeft = _pillLeft;
-    _startRight = _pillRight;
-    _targetLeft = _pillLeft;
-    _targetRight = _pillRight;
   }
 
-  void _animatePill(int from, int to) {
+  void _animateTap(int from, int to) {
     final n = widget.items.length;
     if (n == 0) return;
-    final fromCenter = (from + 0.5) / n;
+    final fromCenter = (_pillLeft + _pillRight) / 2; // current visual center
     final toCenter = (to + 0.5) / n;
 
     _startLeft = fromCenter;
     _startRight = fromCenter;
     _targetLeft = toCenter;
     _targetRight = toCenter;
-
-    _controller.forward(from: 0.0);
+    _isTapAnimating = true;
+    _tapController.forward(from: 0.0);
   }
 
-  void _updatePill() {
-    final t = _controller.value;
+  void _updateTapPill() {
+    final t = _tapController.value;
     final movingRight = _targetLeft > _startLeft;
 
-    // Leading edge moves first, trailing delays → pill stretches then snaps
-    final leadingT = Curves.easeOutCubic.transform(
-      (t / 0.75).clamp(0.0, 1.0),
-    );
-    final trailingT = Curves.easeOutCubic.transform(
-      ((t - 0.25) / 0.75).clamp(0.0, 1.0),
-    );
+    final leadingT = Curves.easeOutCubic.transform((t / 0.75).clamp(0.0, 1.0));
+    final trailingT = Curves.easeOutCubic.transform(((t - 0.25) / 0.75).clamp(0.0, 1.0));
 
-    // Animate the CENTER positions of leading and trailing edges
-    final leadingCenter = movingRight
-        ? _startLeft + (_targetLeft - _startLeft) * leadingT
-        : _startLeft + (_targetLeft - _startLeft) * leadingT;
-    final trailingCenter = movingRight
-        ? _startRight + (_targetRight - _startRight) * trailingT
-        : _startRight + (_targetRight - _startRight) * trailingT;
+    final leadingCenter = _startLeft + (_targetLeft - _startLeft) * leadingT;
+    final trailingCenter = _startRight + (_targetRight - _startRight) * trailingT;
 
     setState(() {
       if (movingRight) {
-        _pillLeft = trailingCenter;  // trailing (left) delays
-        _pillRight = leadingCenter;  // leading (right) goes first
+        _pillLeft = trailingCenter;
+        _pillRight = leadingCenter;
       } else {
-        _pillLeft = leadingCenter;   // leading (left) goes first
-        _pillRight = trailingCenter; // trailing (right) delays
+        _pillLeft = leadingCenter;
+        _pillRight = trailingCenter;
       }
     });
+  }
+
+  void _onTapAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed) {
+      // Snap pill to exact target position
+      _setPillSnap(_targetIndex ?? widget.currentIndex);
+      _targetIndex = null;
+      // Release scroll lock after a microtask so page animation can settle
+      Future.microtask(() {
+        if (mounted) setState(() => _isTapAnimating = false);
+      });
+    }
+  }
+
+  void _onPageScroll() {
+    if (_isTapAnimating) return; // ignore scroll during tap animation
+
+    final n = widget.items.length;
+    if (n == 0) return;
+    final page = pageScrollNotifier.value.clamp(0.0, (n - 1).toDouble());
+
+    final currentIndex = page.floor();
+    final nextIndex = (currentIndex + 1).clamp(0, n - 1);
+    final fraction = page - currentIndex;
+
+    final currentCenter = (currentIndex + 0.5) / n;
+    final nextCenter = (nextIndex + 0.5) / n;
+    final baseCenter = currentCenter + (nextCenter - currentCenter) * fraction;
+
+    if (fraction < 0.01 || fraction > 0.99 || currentIndex == nextIndex) {
+      setState(() {
+        _pillLeft = baseCenter;
+        _pillRight = baseCenter;
+      });
+    } else {
+      final stretchAmount = 0.3 * (0.5 - (fraction - 0.5).abs()) * 2;
+      final halfStretch = stretchAmount / n;
+      setState(() {
+        if (nextCenter > currentCenter) {
+          _pillLeft = baseCenter - halfStretch * (1 - fraction);
+          _pillRight = baseCenter + halfStretch * fraction;
+        } else {
+          _pillLeft = baseCenter - halfStretch * fraction;
+          _pillRight = baseCenter + halfStretch * (1 - fraction);
+        }
+      });
+    }
   }
 
   @override
   void didUpdateWidget(_BottomNavBar old) {
     super.didUpdateWidget(old);
     if (old.currentIndex != widget.currentIndex) {
-      _animatePill(_prevIndex, widget.currentIndex);
-      _prevIndex = widget.currentIndex;
+      // During tap animation, ignore intermediate index changes from PageView
+      // scrolling through pages — the pill is already heading to _targetIndex
+      if (!_isTapAnimating) {
+        _targetIndex = widget.currentIndex;
+        _animateTap(old.currentIndex, widget.currentIndex);
+      }
+    }
+    if (old.items.length != widget.items.length) {
+      _setPillSnap(widget.currentIndex);
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _tapController.dispose();
+    pageScrollNotifier.removeListener(_onPageScroll);
     super.dispose();
   }
 
@@ -310,57 +354,61 @@ class _BottomNavBarState extends State<_BottomNavBar>
                   pillLeft: _pillLeft,
                   pillRight: _pillRight,
                   pillColor: widget.primaryColor.withValues(alpha: 0.15),
-                  pillFixedWidth: _pillFixedWidth,
-                  pillHeight: 32,
-                  pillRadius: 16,
+                  pillFixedWidth: _pillFixedWidth - 8,
+                  pillHeight: 24,
+                  pillRadius: 12,
                   barHeight: 64,
                 ),
               ),
             ),
-            // Nav items
-            Row(
-              children: [
-                for (int i = 0; i < widget.items.length; i++)
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => widget.onTap(i),
-                      behavior: HitTestBehavior.opaque,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconTheme(
-                            data: IconThemeData(
-                              color: i == widget.currentIndex
-                                  ? widget.primaryColor
-                                  : widget.surfaceColor.withValues(alpha: 0.45),
-                              size: 22,
+            // Nav items — use _targetIndex during tap animation to avoid
+            // intermediate page changes flashing icons/text
+            Builder(builder: (context) {
+              final selectedIndex = _targetIndex ?? widget.currentIndex;
+              return Row(
+                children: [
+                  for (int i = 0; i < widget.items.length; i++)
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => widget.onTap(i),
+                        behavior: HitTestBehavior.opaque,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            IconTheme(
+                              data: IconThemeData(
+                                color: i == selectedIndex
+                                    ? widget.primaryColor
+                                    : widget.surfaceColor.withValues(alpha: 0.45),
+                                size: 22,
+                              ),
+                              child: widget.items[i].icon,
                             ),
-                            child: widget.items[i].icon,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            Intl.message(widget.items[i].label.name),
-                            maxLines: 1,
-                            overflow: TextOverflow.clip,
-                            style: TextStyle(
-                              fontFamily: 'SpaceGrotesk',
-                              fontSize: 10,
-                              fontWeight: i == widget.currentIndex
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: i == widget.currentIndex
-                                  ? widget.primaryColor
-                                  : widget.surfaceColor.withValues(alpha: 0.45),
-                              letterSpacing: 0.5,
-                              decoration: TextDecoration.none,
+                            const SizedBox(height: 4),
+                            Text(
+                              Intl.message(widget.items[i].label.name),
+                              maxLines: 1,
+                              overflow: TextOverflow.clip,
+                              style: TextStyle(
+                                fontFamily: 'SpaceGrotesk',
+                                fontSize: 10,
+                                fontWeight: i == selectedIndex
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: i == selectedIndex
+                                    ? widget.primaryColor
+                                    : widget.surfaceColor.withValues(alpha: 0.45),
+                                letterSpacing: 0.5,
+                                decoration: TextDecoration.none,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            ),
+                ],
+              );
+            }),
           ],
         ),
     );

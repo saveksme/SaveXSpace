@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:math' show sin, cos;
 import 'dart:ui';
 
+import 'package:circle_flags/circle_flags.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_clash/common/common.dart';
@@ -16,7 +18,7 @@ import 'package:fl_clash/state.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
 const _kExcludeProxyTypes = {
   'Direct', 'Reject', 'Selector', 'URLTest', 'Fallback',
@@ -213,7 +215,7 @@ class _DashboardViewState extends ConsumerState<DashboardView>
                         ),
                       ),
                       const Spacer(),
-                      _CoreStatusDot(coreStatus: coreStatus),
+                      _CoreStatusDot(isStart: isStart, coreStatus: coreStatus),
                     ],
                   ),
                 ),
@@ -833,34 +835,324 @@ class _FlowParticle {
   });
 }
 
-class _CoreStatusDot extends StatelessWidget {
+class _CoreStatusDot extends StatefulWidget {
+  final bool isStart;
   final CoreStatus coreStatus;
-  const _CoreStatusDot({required this.coreStatus});
+  const _CoreStatusDot({required this.isStart, required this.coreStatus});
+
+  @override
+  State<_CoreStatusDot> createState() => _CoreStatusDotState();
+}
+
+class _CoreStatusDotState extends State<_CoreStatusDot>
+    with TickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late AnimationController _transitionController;
+  late AnimationController _orbitController;
+  late Animation<double> _pulseAnim;
+  late Animation<double> _transitionAnim;
+
+  Color _prevColor = Colors.red;
+  Color _currentColor = Colors.red;
+  String _prevLabel = '';
+  String _currentLabel = '';
+  String _tooltip = '';
+  bool _wasConnecting = false;
+  double _prevLabelW = 0;
+  double _currentLabelW = 0;
+  bool _widthsCalculated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _pulseAnim = CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut);
+
+    _transitionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _transitionAnim = CurvedAnimation(parent: _transitionController, curve: Curves.easeOutCubic);
+
+    _orbitController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat();
+
+    _updateState(initial: true);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _calculateWidths();
+  }
+
+  static final _labelWidthStyle = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.3,
+  );
+
+  double _measureLabel(String label) {
+    final tp = TextPainter(
+      text: TextSpan(text: label, style: _labelWidthStyle),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final w = tp.width;
+    tp.dispose();
+    return w + 4;
+  }
+
+  void _calculateWidths() {
+    _currentLabelW = _measureLabel(_currentLabel);
+    _prevLabelW = _measureLabel(_prevLabel);
+    _widthsCalculated = true;
+  }
+
+  @override
+  void didUpdateWidget(covariant _CoreStatusDot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isStart != widget.isStart || oldWidget.coreStatus != widget.coreStatus) {
+      _updateState();
+    }
+  }
+
+  void _updateState({bool initial = false}) {
+    final Color newColor;
+    final String newLabel;
+
+    if (widget.isStart) {
+      newColor = const Color(0xFF4ADE80);
+      newLabel = appLocalizations.connected;
+      _tooltip = 'VPN-соединение активно';
+    } else if (widget.coreStatus == CoreStatus.connecting) {
+      newColor = Colors.amber;
+      newLabel = '${appLocalizations.connecting}...';
+      _tooltip = 'Устанавливается VPN-соединение';
+    } else {
+      newColor = Colors.red;
+      newLabel = appLocalizations.disconnected;
+      _tooltip = 'VPN отключен';
+    }
+
+    _wasConnecting = widget.coreStatus == CoreStatus.connecting;
+
+    if (initial) {
+      _prevColor = newColor;
+      _currentColor = newColor;
+      _prevLabel = newLabel;
+      _currentLabel = newLabel;
+      _prevLabelW = _measureLabel(newLabel);
+      _currentLabelW = _prevLabelW;
+    } else {
+      _prevColor = _currentColor;
+      _prevLabel = _currentLabel;
+      _prevLabelW = _currentLabelW;
+      _currentColor = newColor;
+      _currentLabel = newLabel;
+      _currentLabelW = _measureLabel(newLabel);
+      _transitionController.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    _transitionController.dispose();
+    _orbitController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (coreStatus) {
-      CoreStatus.connected => const Color(0xFF4ADE80),
-      CoreStatus.connecting => Colors.amber,
-      CoreStatus.disconnected => Colors.red,
-    };
-    final label = switch (coreStatus) {
-      CoreStatus.connected => appLocalizations.connected,
-      CoreStatus.connecting => appLocalizations.connecting,
-      CoreStatus.disconnected => appLocalizations.disconnected,
-    };
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Tooltip(
+      message: _tooltip,
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_pulseAnim, _transitionAnim, _orbitController]),
+        builder: (context, _) {
+          final t = _transitionAnim.value;
+          final color = Color.lerp(_prevColor, _currentColor, t)!;
+          final pulse = _pulseAnim.value;
+          final isConnecting = _wasConnecting && t < 1.0 ? true : widget.coreStatus == CoreStatus.connecting;
+          final isConnected = widget.isStart;
+
+          // Interpolate label width during transition for smooth resize
+          if (!_widthsCalculated) _calculateWidths();
+          final labelW = _prevLabelW + (_currentLabelW - _prevLabelW) * t;
+          final pillWidth = 10.0 + 18 + 6 + labelW + 10.0;
+
+          return SizedBox(
+            width: pillWidth,
+            height: 28,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: color.withValues(alpha: 0.15), width: 1),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CustomPaint(
+                        painter: _StatusOrbPainter(
+                          color: color,
+                          pulse: pulse,
+                          orbit: _orbitController.value,
+                          isConnecting: isConnecting,
+                          isConnected: isConnected,
+                          transition: t,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: _buildAnimatedLabel(t, color),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAnimatedLabel(double t, Color color) {
+    final style = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.3,
+    );
+
+    // Manual crossfade — width is controlled by parent SizedBox
+    return Stack(
       children: [
-        Container(
-          width: 8, height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        if (t < 1.0)
+          Opacity(
+            opacity: 1.0 - t,
+            child: Text(
+              _prevLabel,
+              style: style.copyWith(color: _prevColor.withValues(alpha: 0.95)),
+            ),
+          ),
+        Opacity(
+          opacity: t,
+          child: Text(
+            _currentLabel,
+            style: style.copyWith(color: _currentColor.withValues(alpha: 0.95)),
+          ),
         ),
-        const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 12, color: color.withValues(alpha: 0.9), fontWeight: FontWeight.w500)),
       ],
     );
   }
+}
+
+class _StatusOrbPainter extends CustomPainter {
+  final Color color;
+  final double pulse;
+  final double orbit;
+  final bool isConnecting;
+  final bool isConnected;
+  final double transition;
+
+  _StatusOrbPainter({
+    required this.color,
+    required this.pulse,
+    required this.orbit,
+    required this.isConnecting,
+    required this.isConnected,
+    required this.transition,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final r = size.width / 2; // adaptive to container
+    final baseRadius = r * 0.28;
+
+    if (isConnected) {
+      // === CONNECTED: Breathing orb with soft glow ===
+      final glowPaint = Paint()
+        ..color = color.withValues(alpha: 0.12 + pulse * 0.08)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.35);
+      canvas.drawCircle(center, r * 0.55, glowPaint);
+
+      // Ring
+      final ringPaint = Paint()
+        ..color = color.withValues(alpha: 0.18 + pulse * 0.12)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+      canvas.drawCircle(center, r * 0.55 + pulse * r * 0.12, ringPaint);
+
+      // Core glow
+      final corePaint = Paint()
+        ..color = color
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.15);
+      canvas.drawCircle(center, baseRadius + pulse * r * 0.06, corePaint);
+
+      // Sharp core
+      canvas.drawCircle(center, baseRadius, Paint()..color = color);
+
+      // Highlight
+      canvas.drawCircle(
+        center + Offset(-r * 0.06, -r * 0.06),
+        baseRadius * 0.3,
+        Paint()..color = Colors.white.withValues(alpha: 0.35 + pulse * 0.15),
+      );
+
+    } else if (isConnecting) {
+      // === CONNECTING: Orbiting particles ===
+      final orbitR = r * 0.6;
+
+      // Core
+      final coreSize = baseRadius * 0.7 + pulse * baseRadius * 0.3;
+      canvas.drawCircle(center, coreSize, Paint()
+        ..color = color.withValues(alpha: 0.6 + pulse * 0.4)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.1));
+
+      // Particles
+      for (int i = 0; i < 3; i++) {
+        final angle = orbit * 6.2832 + (i * 6.2832 / 3);
+        final p = Offset(center.dx + orbitR * cos(angle), center.dy + orbitR * sin(angle));
+        canvas.drawCircle(p, 1.2 + sin(orbit * 6.28 + i * 2) * 0.4, Paint()
+          ..color = color.withValues(alpha: 0.7 + sin(orbit * 6.28 + i) * 0.3));
+      }
+
+      // Arc
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: orbitR),
+        orbit * 6.28, 1.8, false,
+        Paint()
+          ..color = color.withValues(alpha: 0.2 + pulse * 0.12)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8
+          ..strokeCap = StrokeCap.round,
+      );
+
+    } else {
+      // === DISCONNECTED: Dim dot ===
+      canvas.drawCircle(center, r * 0.45, Paint()
+        ..color = color.withValues(alpha: 0.06 + pulse * 0.03)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.7);
+
+      canvas.drawCircle(center, baseRadius, Paint()
+        ..color = color.withValues(alpha: 0.45 + pulse * 0.15));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StatusOrbPainter old) => true;
 }
 
 class _ConnectButton extends StatelessWidget {
@@ -1229,15 +1521,17 @@ class _ModeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
     return Row(
       children: [
         Expanded(
           child: _ModeCard(
             icon: Icons.alt_route_rounded,
             label: Intl.message(Mode.rule.name),
-            subtitle: 'Умная маршрутизация',
+            subtitle: isMobile ? 'По правилам' : 'Умная маршрутизация',
             isSelected: currentMode == Mode.rule,
             primaryColor: primaryColor,
+            isMobile: isMobile,
             onTap: () {
               HapticFeedback.selectionClick();
               onModeChanged(Mode.rule);
@@ -1249,9 +1543,10 @@ class _ModeSelector extends StatelessWidget {
           child: _ModeCard(
             icon: Icons.language_rounded,
             label: Intl.message(Mode.global.name),
-            subtitle: 'Весь трафик через прокси',
+            subtitle: isMobile ? 'Через прокси' : 'Весь трафик через прокси',
             isSelected: currentMode == Mode.global,
             primaryColor: primaryColor,
+            isMobile: isMobile,
             onTap: () {
               HapticFeedback.selectionClick();
               onModeChanged(Mode.global);
@@ -1269,6 +1564,7 @@ class _ModeCard extends StatefulWidget {
   final String subtitle;
   final bool isSelected;
   final Color primaryColor;
+  final bool isMobile;
   final VoidCallback onTap;
 
   const _ModeCard({
@@ -1277,6 +1573,7 @@ class _ModeCard extends StatefulWidget {
     required this.subtitle,
     required this.isSelected,
     required this.primaryColor,
+    this.isMobile = false,
     required this.onTap,
   });
 
@@ -1401,7 +1698,7 @@ class _ModeCardState extends State<_ModeCard>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: widget.isMobile ? 8 : 10,
                         color: sel
                             ? pc.withValues(alpha: 0.6)
                             : const Color(0xFF444444),
@@ -2248,9 +2545,14 @@ class _ProxySelectorState extends ConsumerState<_ProxySelector>
         .where((p) => !_kExcludeProxyTypes.contains(p.type) &&
             p.name != 'DIRECT' && p.name != 'REJECT')
         .toList();
-    final selectedProxy = ref.watch(
+    final rawSelectedProxy = (ref.watch(
       getSelectedProxyNameProvider(GroupName.GLOBAL.name),
-    ) ?? '';
+    ) ?? '').trim();
+    // Treat DIRECT/REJECT as "no server selected"
+    final rawUpper = rawSelectedProxy.toUpperCase();
+    final selectedProxy = (rawUpper == 'DIRECT' || rawUpper == 'REJECT' || rawSelectedProxy.isEmpty)
+        ? ''
+        : rawSelectedProxy;
 
     return AnimatedContainer(
       key: const ValueKey('global_selector'),
@@ -2308,7 +2610,7 @@ class _ProxySelectorState extends ConsumerState<_ProxySelector>
                         EmojiText(
                           selectedProxy.isNotEmpty
                               ? selectedProxy
-                              : 'Не выбран',
+                              : '🌐 Выберите сервер',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
@@ -2380,22 +2682,28 @@ class _ProxySelectorState extends ConsumerState<_ProxySelector>
               final t = _expandAnimation.value;
               if (t <= 0.0) return const SizedBox.shrink();
               final blur = (1.0 - t) * 8.0;
-              final maxH = 280.0;
+              final maxH = 400.0;
 
               Widget content = Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Divider
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      height: 1,
-                      color: Colors.white.withValues(alpha: 0.05),
+                  // Gradient divider
+                  Container(
+                    height: 1,
+                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Color(0x0FFFFFFF),
+                          Colors.transparent,
+                        ],
+                      ),
                     ),
                   ),
                   // Proxy list with scroll isolation
                   _IsolatedScrollList(
-                    height: (proxies.length * 42.0).clamp(0.0, maxH - 1) * t,
+                    height: (proxies.length * 52.0).clamp(0.0, maxH - 1) * t,
                     itemCount: proxies.length,
                     itemBuilder: (_, index) {
                       final proxy = proxies[index];
@@ -2457,51 +2765,125 @@ class _ProxyListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final extracted = extractFlag(proxy.name);
+    final countryCode = extracted.countryCode;
+    final displayName = extracted.name;
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isActive
               ? primaryColor.withValues(alpha: 0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+              : const Color(0xFF0D0D0D),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isActive
+                ? primaryColor.withValues(alpha: 0.25)
+                : const Color(0xFF1A1A1A),
+            width: isActive ? 1 : 0.5,
+          ),
         ),
         child: Row(
           children: [
-            // Active indicator
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: isActive ? 4 : 0,
-              height: 4,
-              margin: EdgeInsets.only(right: isActive ? 10 : 0),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: primaryColor,
-              ),
-            ),
-            // Name
+            // Country flag or globe icon
+            _buildLeading(countryCode),
+            const SizedBox(width: 12),
+            // Name + type (two lines)
             Expanded(
-              child: EmojiText(
-                proxy.name,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                  color: isActive
-                      ? Colors.white.withValues(alpha: 0.9)
-                      : Colors.white.withValues(alpha: 0.5),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  EmojiText(
+                    displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                      color: isActive
+                          ? Colors.white
+                          : const Color(0xFFE6E1E5),
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    proxy.type,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF666666),
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
               ),
             ),
-            // Delay with blur reveal animation
-            _AnimatedDelay(proxyName: proxy.name, testUrl: testUrl),
+            const SizedBox(width: 8),
+            // Delay pill
+            _DelayPillDashboard(proxyName: proxy.name, testUrl: testUrl),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLeading(String? countryCode) {
+    if (countryCode != null) {
+      return SizedBox(
+        width: 26,
+        height: 26,
+        child: Stack(
+          children: [
+            ClipOval(
+              child: CircleFlag(countryCode, size: 26),
+            ),
+            if (isActive)
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: primaryColor.withValues(alpha: 0.7),
+                    width: 1.5,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isActive
+            ? primaryColor.withValues(alpha: 0.15)
+            : const Color(0xFF151515),
+        border: Border.all(
+          color: isActive
+              ? primaryColor.withValues(alpha: 0.4)
+              : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          isActive ? Icons.check_rounded : Icons.public_rounded,
+          size: isActive ? 14 : 13,
+          color: isActive
+              ? primaryColor
+              : const Color(0xFF666666),
         ),
       ),
     );
@@ -2643,6 +3025,87 @@ class _AnimatedDelayState extends ConsumerState<_AnimatedDelay>
   }
 }
 
+/// Styled delay pill for the dashboard server list.
+class _DelayPillDashboard extends ConsumerWidget {
+  final String proxyName;
+  final String? testUrl;
+
+  const _DelayPillDashboard({required this.proxyName, required this.testUrl});
+
+  static const _kPillBg = Color(0xFF151515);
+  static const _kMuted = Color(0xFF666666);
+  static const _kGood = Color(0xFF81D4A4);
+  static const _kMedium = Color(0xFFF0C96D);
+  static const _kBad = Color(0xFFF2918A);
+
+  static Color _delayColor(int delay) {
+    if (delay < 0) return _kBad;
+    if (delay < 300) return _kGood;
+    if (delay < 600) return _kMedium;
+    return _kBad;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final delay = ref.watch(
+      getDelayProvider(proxyName: proxyName, testUrl: testUrl),
+    );
+
+    // No data
+    if (delay == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: _kPillBg,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          '— ms',
+          style: TextStyle(
+            fontSize: 11,
+            color: _kMuted,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      );
+    }
+
+    // Testing in progress
+    if (delay == 0) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: _kPillBg,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+          ),
+        ),
+      );
+    }
+
+    // Result — wrap _AnimatedDelay in colored pill
+    final color = _delayColor(delay);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: color.withValues(alpha: 0.25),
+          width: 0.5,
+        ),
+      ),
+      child: _AnimatedDelay(proxyName: proxyName, testUrl: testUrl),
+    );
+  }
+}
+
 /// A scroll list that captures mouse wheel events to prevent them
 /// from bubbling to the parent scrollable (page scroll).
 class _IsolatedScrollList extends StatefulWidget {
@@ -2690,12 +3153,12 @@ class _IsolatedScrollListState extends State<_IsolatedScrollList> {
             scrollbars: false,
           ),
           child: ListView.builder(
-            controller: _controller,
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            physics: const ClampingScrollPhysics(),
-            itemCount: widget.itemCount,
-            itemBuilder: widget.itemBuilder,
-          ),
+                  controller: _controller,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  physics: const ClampingScrollPhysics(),
+                  itemCount: widget.itemCount,
+                  itemBuilder: widget.itemBuilder,
+                ),
         ),
       ),
     );

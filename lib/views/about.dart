@@ -26,12 +26,6 @@ class AboutView extends StatelessWidget {
       title: appLocalizations.more,
       items: [
         ListItem(
-          title: Text(appLocalizations.checkUpdate),
-          onTap: () {
-            _checkUpdate(context);
-          },
-        ),
-        ListItem(
           title: const Text('Telegram'),
           onTap: () {
             globalState.openUrl('https://t.me/savexchannel');

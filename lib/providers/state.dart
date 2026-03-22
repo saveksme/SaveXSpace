@@ -79,20 +79,29 @@ UpdateParams updateParams(Ref ref) {
   final routeMode = ref.watch(
     networkSettingProvider.select((state) => state.routeMode),
   );
+  final ruBypass = ref.watch(
+    appSettingProvider.select((state) => state.ruBypass),
+  );
   return ref.watch(
     patchClashConfigProvider.select(
-      (state) => UpdateParams(
-        tun: state.tun.getRealTun(routeMode),
-        allowLan: state.allowLan,
-        findProcessMode: state.findProcessMode,
-        mode: state.mode,
-        logLevel: state.logLevel,
-        ipv6: state.ipv6,
-        tcpConcurrent: state.tcpConcurrent,
-        externalController: state.externalController,
-        unifiedDelay: state.unifiedDelay,
-        mixedPort: state.mixedPort,
-      ),
+      (state) {
+        var effectiveMode = state.mode;
+        if (ruBypass && state.mode == Mode.global) {
+          effectiveMode = Mode.rule;
+        }
+        return UpdateParams(
+          tun: state.tun.getRealTun(routeMode),
+          allowLan: state.allowLan,
+          findProcessMode: state.findProcessMode,
+          mode: effectiveMode,
+          logLevel: state.logLevel,
+          ipv6: state.ipv6,
+          tcpConcurrent: state.tcpConcurrent,
+          externalController: state.externalController,
+          unifiedDelay: state.unifiedDelay,
+          mixedPort: state.mixedPort,
+        );
+      },
     ),
   );
 }

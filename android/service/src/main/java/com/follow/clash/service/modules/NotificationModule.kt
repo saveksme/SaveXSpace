@@ -4,7 +4,11 @@ import android.app.Notification.FOREGROUND_SERVICE_IMMEDIATE
 import android.app.Service
 import android.app.Service.STOP_FOREGROUND_REMOVE
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.os.Build
+import androidx.core.content.ContextCompat
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
@@ -90,7 +94,19 @@ class NotificationModule(private val service: Service) : Module() {
                 service, GlobalState.NOTIFICATION_CHANNEL
             )
         ) {
-            setSmallIcon(R.drawable.ic)
+            setSmallIcon(R.drawable.ic_savex)
+            val size = 192
+            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val cvs = Canvas(bmp)
+            val bg = Paint(Paint.ANTI_ALIAS_FLAG)
+            bg.color = 0xFF1A1A1A.toInt()
+            val radius = size * 0.22f
+            cvs.drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), radius, radius, bg)
+            val icon = ContextCompat.getDrawable(service, R.drawable.ic_savex_service)
+            val pad = (size * 0.15).toInt()
+            icon?.setBounds(pad, pad, size - pad, size - pad)
+            icon?.draw(cvs)
+            setLargeIcon(bmp)
             setContentTitle("SaveX Space")
             setContentIntent(intent.toPendingIntent)
             setPriority(NotificationCompat.PRIORITY_HIGH)

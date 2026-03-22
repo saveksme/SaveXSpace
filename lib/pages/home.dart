@@ -12,6 +12,10 @@ import 'package:intl/intl.dart';
 
 typedef OnSelected = void Function(int index);
 
+/// Global notifier for page scroll fraction (0.0 to itemCount-1).
+/// Used by _BottomNavBar to follow swipe position in real-time.
+final pageScrollNotifier = ValueNotifier<double>(0.0);
+
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -72,16 +76,24 @@ class _HomePageView extends ConsumerStatefulWidget {
 
 class _HomePageViewState extends ConsumerState<_HomePageView> {
   late PageController _pageController;
+  bool _isUserSwiping = false;
 
   @override
   initState() {
     super.initState();
     _pageController = PageController(initialPage: _pageIndex);
+    _pageController.addListener(_onScroll);
     ref.listenManual(currentPageLabelProvider, (prev, next) {
-      if (prev != next) {
+      if (prev != next && !_isUserSwiping) {
         _toPage(next);
       }
     });
+  }
+
+  void _onScroll() {
+    if (_pageController.hasClients && _pageController.page != null) {
+      pageScrollNotifier.value = _pageController.page!;
+    }
   }
 
   @override
@@ -134,14 +146,27 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
     super.dispose();
   }
 
+  void _onPageChanged(int index) {
+    if (index >= 0 && index < widget.navigationItems.length) {
+      _isUserSwiping = true;
+      ref.read(currentPageLabelProvider.notifier).value =
+          widget.navigationItems[index].label;
+      _isUserSwiping = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final itemCount = ref.watch(
       currentNavigationItemsStateProvider.select((state) => state.value.length),
     );
+    final isMobile = ref.watch(isMobileViewProvider);
     return PageView.builder(
       controller: _pageController,
-      physics: const NeverScrollableScrollPhysics(),
+      physics: isMobile
+          ? const BouncingScrollPhysics()
+          : const NeverScrollableScrollPhysics(),
+      onPageChanged: _onPageChanged,
       itemCount: itemCount,
       itemBuilder: (context, index) {
         return widget.pageBuilder(context, index);

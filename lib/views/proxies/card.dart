@@ -12,31 +12,7 @@ import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Extract leading flag emoji from proxy name.
-/// Returns country code (lowercase, e.g. "de") and cleaned name.
-({String? countryCode, String name}) _extractFlag(String raw) {
-  final runes = raw.runes.toList();
-  if (runes.length >= 2) {
-    final a = runes[0];
-    final b = runes[1];
-    // Regional Indicator Symbol range: 0x1F1E6 (🇦) to 0x1F1FF (🇿)
-    if (a >= 0x1F1E6 && a <= 0x1F1FF && b >= 0x1F1E6 && b <= 0x1F1FF) {
-      // Convert to 2-letter country code
-      final code = String.fromCharCodes([
-        a - 0x1F1E6 + 0x41, // 'A'
-        b - 0x1F1E6 + 0x41,
-      ]).toLowerCase();
-      // Strip flag + optional trailing space/separator
-      var rest = String.fromCharCodes(runes.sublist(2));
-      rest = rest.trimLeft();
-      if (rest.startsWith('|') || rest.startsWith('-') || rest.startsWith('·')) {
-        rest = rest.substring(1).trimLeft();
-      }
-      return (countryCode: code, name: rest.isEmpty ? raw : rest);
-    }
-  }
-  return (countryCode: null, name: raw);
-}
+// extractFlag is imported from package:fl_clash/common/proxy.dart via common.dart
 
 /// Track which proxies have already animated in this session
 final Set<String> _animatedProxies = {};
@@ -142,7 +118,7 @@ class _ProxyCardState extends State<ProxyCard>
   }
 
   Widget _buildCard(Color primaryColor) {
-    final extracted = _extractFlag(widget.proxy.name);
+    final extracted = extractFlag(widget.proxy.name);
     final countryCode = extracted.countryCode;
     final displayName = extracted.name;
 

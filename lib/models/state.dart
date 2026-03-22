@@ -348,6 +348,8 @@ abstract class MakeRealProfileState with _$MakeRealProfileState {
     required bool appendSystemDns,
     required List<Rule> addedRules,
     required String defaultUA,
+    @Default(false) bool ruBypassActive,
+    @Default('') String ruBypassProxy,
   }) = _MakeRealProfileState;
 }
 

@@ -87,7 +87,7 @@
         <service
             android:name=".TileService"
             android:exported="true"
-            android:icon="@drawable/ic"
+            android:icon="@drawable/ic_savex"
             android:label="SaveX Space"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>

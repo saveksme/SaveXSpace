@@ -254,6 +254,16 @@ Future<Map<String, dynamic>> _makeRealProfileTask(
     }
     rules = [...finalAddedRules, ...rules];
   }
+  // RU bypass: in Global mode, switch to Rule mode with RU traffic going DIRECT
+  // Only 3 rules needed: RU sites direct, everything else through GLOBAL proxy
+  if (data.ruBypassActive) {
+    rawConfig['mode'] = Mode.rule.name;
+    rules = [
+      'GEOSITE,category-ru,DIRECT',
+      'GEOIP,RU,DIRECT',
+      'MATCH,GLOBAL',
+    ];
+  }
   rawConfig['rules'] = rules;
   return Map<String, dynamic>.from(rawConfig);
 }

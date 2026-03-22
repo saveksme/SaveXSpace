@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/models/models.dart';
@@ -70,6 +71,7 @@ class _ToolViewState extends ConsumerState<ToolsView> {
     return generateSection(
       title: context.appLocalizations.settings,
       items: [
+        const _CoreStatusItem(),
         const _LocaleItem(),
         const _BackupItem(),
         if (system.isDesktop) const _HotkeyItem(),
@@ -266,6 +268,40 @@ class _SettingItem extends StatelessWidget {
       title: Text(context.appLocalizations.application),
       subtitle: Text(context.appLocalizations.applicationDesc),
       delegate: OpenDelegate(widget: const ApplicationSettingView()),
+    );
+  }
+}
+
+class _CoreStatusItem extends ConsumerWidget {
+  const _CoreStatusItem();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final coreStatus = ref.watch(coreStatusProvider);
+    final color = switch (coreStatus) {
+      CoreStatus.connected => const Color(0xFF4ADE80),
+      CoreStatus.connecting => Colors.amber,
+      CoreStatus.disconnected => Colors.red,
+    };
+    final label = switch (coreStatus) {
+      CoreStatus.connected => context.appLocalizations.connected,
+      CoreStatus.connecting => context.appLocalizations.connecting,
+      CoreStatus.disconnected => context.appLocalizations.disconnected,
+    };
+    return ListItem(
+      leading: const Icon(Icons.memory),
+      title: const Text('Статус ядра'),
+      subtitle: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8, height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: color, fontSize: 13)),
+        ],
+      ),
     );
   }
 }

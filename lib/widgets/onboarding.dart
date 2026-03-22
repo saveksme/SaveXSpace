@@ -46,14 +46,14 @@ class _OnboardingOverlayState extends State<_OnboardingOverlay>
       iconColor: Color(0xFFAB6BF0),
       title: 'Добавьте подписку',
       description: 'Перейдите в «Подписки» и добавьте ссылку от вашего VPN-провайдера',
-      hint: 'Формат: xspace://install-config?url=...',
+      hint: 'Скопируйте ссылку подписки из личного кабинет SaveX',
     ),
     _OnboardingStep(
       icon: Icons.route_rounded,
       iconColor: Color(0xFF6BB8F0),
       title: 'Настройте маршруты',
       description: 'Во вкладке «Маршруты» выберите сервер и режим работы. Режим Авто автоматически направляет трафик по правилам',
-      hint: 'Авто — для большинства пользователей',
+      hint: 'Глобальный — для большинства пользователей',
     ),
     _OnboardingStep(
       icon: Icons.power_settings_new_rounded,
@@ -378,6 +378,7 @@ class _OnboardingPageState extends State<_OnboardingPage>
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
                         Icons.lightbulb_outline_rounded,
@@ -388,6 +389,7 @@ class _OnboardingPageState extends State<_OnboardingPage>
                       Flexible(
                         child: Text(
                           widget.step.hint,
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             fontFamily: 'SpaceGrotesk',
                             fontSize: 12,

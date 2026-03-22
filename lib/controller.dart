@@ -49,7 +49,7 @@ extension InitControllerExt on AppController {
     };
     updateTray();
     autoUpdateProfiles();
-    autoCheckUpdate();
+    // autoCheckUpdate(); // disabled
     autoLaunch?.updateStatus(_ref.read(appSettingProvider).autoLaunch);
     if (!_ref.read(appSettingProvider).silentLaunch) {
       window?.show();
@@ -58,7 +58,6 @@ extension InitControllerExt on AppController {
     }
     await _handleFailedPreference();
     await _handlerDisclaimer();
-    await _showCrashlyticsTip();
     _autoSelectProfileIfNeeded();
     await _connectCore();
     await _initCore();
@@ -113,23 +112,6 @@ extension InitControllerExt on AppController {
           ),
         ) ??
         false;
-  }
-
-  Future<void> _showCrashlyticsTip() async {
-    if (!system.isAndroid) {
-      return;
-    }
-    if (_ref.read(appSettingProvider.select((state) => state.crashlyticsTip))) {
-      return;
-    }
-    await globalState.showMessage(
-      title: appLocalizations.dataCollectionTip,
-      cancelable: false,
-      message: TextSpan(text: appLocalizations.dataCollectionContent),
-    );
-    _ref
-        .read(appSettingProvider.notifier)
-        .update((state) => state.copyWith(crashlyticsTip: true));
   }
 
   Future<void> _handlerDisclaimer() async {
@@ -258,7 +240,7 @@ extension StateControllerExt on AppController {
   }
 
   SetupParams get setupParams {
-    final selectedMap = _ref.read(selectedMapProvider);
+    final selectedMap = Map<String, String>.from(_ref.read(selectedMapProvider));
     final testUrl = _ref.read(
       appSettingProvider.select((state) => state.testUrl),
     );
@@ -438,6 +420,12 @@ extension ProxiesControllerExt on AppController {
     ) async {
       await changeProxy(groupName: groupName, proxyName: proxyName);
       updateGroupsDebounce();
+      // Re-apply profile when RU bypass is active and proxy changed in GLOBAL
+      final ruBypass = _ref.read(appSettingProvider).ruBypass;
+      final mode = _ref.read(patchClashConfigProvider).mode;
+      if (ruBypass && mode == Mode.global && groupName == 'GLOBAL') {
+        applyProfileDebounce(force: true);
+      }
     }, args: [groupName, proxyName]);
   }
 
@@ -675,6 +663,7 @@ extension SetupControllerExt on AppController {
     if (mode == Mode.global) {
       updateCurrentGroupName(GroupName.GLOBAL.name);
     }
+    applyProfileDebounce(force: true);
     addCheckIp();
   }
 
@@ -735,6 +724,20 @@ extension SetupControllerExt on AppController {
     if (scriptContent?.isNotEmpty == true) {
       rawConfig = await globalState.handleEvaluate(scriptContent!, rawConfig);
     }
+    // Determine if RU bypass is active
+    final ruBypass = _ref.read(appSettingProvider).ruBypass;
+    bool ruBypassActive = false;
+    if (ruBypass && patchConfig.mode == Mode.global) {
+      final selectedMap = _ref.read(selectedMapProvider);
+      final globalProxy = selectedMap['GLOBAL'] ?? '';
+      if (globalProxy.isNotEmpty) {
+        final flag = extractFlag(globalProxy);
+        ruBypassActive = flag.countryCode != 'ru';
+      } else {
+        ruBypassActive = true;
+      }
+    }
+
     final directory = await appPath.profilesPath;
     final res = makeRealProfileTask(
       MakeRealProfileState(
@@ -746,6 +749,8 @@ extension SetupControllerExt on AppController {
         appendSystemDns: appendSystemDns,
         addedRules: addedRules,
         defaultUA: defaultUA,
+        ruBypassActive: ruBypassActive,
+        ruBypassProxy: ruBypassActive ? (_ref.read(selectedMapProvider)['GLOBAL'] ?? '') : '',
       ),
     );
     return res;

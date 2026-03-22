@@ -1,4 +1,5 @@
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/providers/config.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
@@ -143,6 +144,30 @@ class AutoRunItem extends ConsumerWidget {
   }
 }
 
+class RuBypassItem extends ConsumerWidget {
+  const RuBypassItem({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ruBypass = ref.watch(
+      appSettingProvider.select((state) => state.ruBypass),
+    );
+    return ListItem.switchItem(
+      title: const Text('Обход RU трафика'),
+      subtitle: const Text('В глобальном режиме RU сайты работают напрямую'),
+      delegate: SwitchDelegate(
+        value: ruBypass,
+        onChanged: (bool value) {
+          ref
+              .read(appSettingProvider.notifier)
+              .update((state) => state.copyWith(ruBypass: value));
+          appController.applyProfileDebounce(force: true);
+        },
+      ),
+    );
+  }
+}
+
 class HiddenItem extends ConsumerWidget {
   const HiddenItem({super.key});
 
@@ -269,6 +294,7 @@ class ApplicationSettingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     List<Widget> items = [
+      RuBypassItem(),
       MinimizeItem(),
       if (system.isDesktop) ...[AutoLaunchItem(), SilentLaunchItem()],
       AutoRunItem(),
@@ -277,7 +303,6 @@ class ApplicationSettingView extends StatelessWidget {
       OpenLogsItem(),
       CloseConnectionsItem(),
       UsageItem(),
-      if (system.isAndroid) CrashlyticsItem(),
       AutoCheckUpdateItem(),
     ];
     return BaseScaffold(
