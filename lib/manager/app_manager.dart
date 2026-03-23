@@ -319,9 +319,15 @@ class _BottomNavBarState extends State<_BottomNavBar>
   void didUpdateWidget(_BottomNavBar old) {
     super.didUpdateWidget(old);
     if (old.currentIndex != widget.currentIndex) {
-      // During tap animation, ignore intermediate index changes from PageView
-      // scrolling through pages — the pill is already heading to _targetIndex
-      if (!_isTapAnimating) {
+      if (_isTapAnimating) {
+        // If already animating AND the new index differs from current target,
+        // retarget the animation (user tapped another item mid-animation)
+        if (_targetIndex != null && _targetIndex != widget.currentIndex) {
+          _targetIndex = widget.currentIndex;
+          _retargetAnimation(widget.currentIndex);
+        }
+        // Otherwise ignore — intermediate page changes from PageView
+      } else {
         _targetIndex = widget.currentIndex;
         _animateTap(old.currentIndex, widget.currentIndex);
       }
@@ -329,6 +335,18 @@ class _BottomNavBarState extends State<_BottomNavBar>
     if (old.items.length != widget.items.length) {
       _setPillSnap(widget.currentIndex);
     }
+  }
+
+  void _retargetAnimation(int newTarget) {
+    final n = widget.items.length;
+    if (n == 0) return;
+    // Capture current visual position as the new start
+    _startLeft = _pillLeft;
+    _startRight = _pillRight;
+    final toCenter = (newTarget + 0.5) / n;
+    _targetLeft = toCenter;
+    _targetRight = toCenter;
+    _tapController.forward(from: 0.0);
   }
 
   @override

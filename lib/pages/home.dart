@@ -76,7 +76,9 @@ class _HomePageView extends ConsumerStatefulWidget {
 
 class _HomePageViewState extends ConsumerState<_HomePageView> {
   late PageController _pageController;
-  bool _isUserSwiping = false;
+  bool _isProgrammaticNavigation = false;
+  PageLabel? _navTarget;
+  int _navEpoch = 0; // tracks navigation generation for reentrancy
 
   @override
   initState() {
@@ -84,7 +86,8 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
     _pageController = PageController(initialPage: _pageIndex);
     _pageController.addListener(_onScroll);
     ref.listenManual(currentPageLabelProvider, (prev, next) {
-      if (prev != next && !_isUserSwiping) {
+      if (prev != next) {
+        if (_isProgrammaticNavigation && _navTarget == next) return;
         _toPage(next);
       }
     });
@@ -122,6 +125,9 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
     if (index == -1) {
       return;
     }
+    _isProgrammaticNavigation = true;
+    _navTarget = pageLabel;
+    final epoch = ++_navEpoch;
     final isAnimateToPage = ref.read(appSettingProvider).isAnimateToPage;
     final isMobile = ref.read(isMobileViewProvider);
     if ((isAnimateToPage || !isMobile) && !ignoreAnimateTo) {
@@ -132,6 +138,22 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
       );
     } else {
       _pageController.jumpToPage(index);
+    }
+    // Only clear flags if this is still the latest navigation
+    // (a newer _toPage call may have started while we were awaiting)
+    if (mounted && _navEpoch == epoch) {
+      _isProgrammaticNavigation = false;
+      _navTarget = null;
+
+      // If user touch interrupted the animation, PageView may have
+      // settled on a different page. Sync provider to reality.
+      final actualPage = _pageController.page?.round() ?? index;
+      if (actualPage != index &&
+          actualPage >= 0 &&
+          actualPage < widget.navigationItems.length) {
+        ref.read(currentPageLabelProvider.notifier).value =
+            widget.navigationItems[actualPage].label;
+      }
     }
   }
 
@@ -147,11 +169,12 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
   }
 
   void _onPageChanged(int index) {
+    // Skip intermediate page changes during programmatic navigation
+    // (animateToPage fires this for every page it passes through)
+    if (_isProgrammaticNavigation) return;
     if (index >= 0 && index < widget.navigationItems.length) {
-      _isUserSwiping = true;
       ref.read(currentPageLabelProvider.notifier).value =
           widget.navigationItems[index].label;
-      _isUserSwiping = false;
     }
   }
 

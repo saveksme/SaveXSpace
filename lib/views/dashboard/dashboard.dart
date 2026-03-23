@@ -107,11 +107,40 @@ class _DashboardViewState extends ConsumerState<DashboardView>
   void _handleToggle() {
     HapticFeedback.heavyImpact();
     final isStart = ref.read(isStartProvider);
+
+    // If turning on in global mode, check if a server is selected
+    if (!isStart) {
+      final mode = ref.read(patchClashConfigProvider).mode;
+      if (mode == Mode.global) {
+        final rawProxy = (ref.read(
+          getSelectedProxyNameProvider(GroupName.GLOBAL.name),
+        ) ?? '').trim();
+        final upper = rawProxy.toUpperCase();
+        if (rawProxy.isEmpty || upper == 'DIRECT' || upper == 'REJECT') {
+          _showSelectServerWarning();
+          return;
+        }
+      }
+    }
+
     // Trigger ripple animation on tap
     _rippleController.forward(from: 0.0);
     debouncer.call(FunctionTag.updateStatus, () {
       appController.updateStatus(!isStart, isInit: !ref.read(initProvider));
     }, duration: commonDuration);
+  }
+
+  void _showSelectServerWarning() {
+    HapticFeedback.mediumImpact();
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => _SelectServerWarning(
+        primaryColor: Theme.of(context).colorScheme.primary,
+        onDismiss: () => entry.remove(),
+      ),
+    );
+    overlay.insert(entry);
   }
 
   Future<bool> _handleRefresh() async {
@@ -3165,3 +3194,206 @@ class _IsolatedScrollListState extends State<_IsolatedScrollList> {
   }
 }
 
+/// Full-screen overlay warning in onboarding style: "Select a server"
+class _SelectServerWarning extends StatefulWidget {
+  final Color primaryColor;
+  final VoidCallback onDismiss;
+
+  const _SelectServerWarning({
+    required this.primaryColor,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_SelectServerWarning> createState() => _SelectServerWarningState();
+}
+
+class _SelectServerWarningState extends State<_SelectServerWarning>
+    with TickerProviderStateMixin {
+  late AnimationController _entryController;
+  late Animation<double> _bgFade;
+  late Animation<double> _iconScale;
+  late Animation<double> _textFade;
+  late Animation<Offset> _textSlide;
+  late AnimationController _pulseController;
+  late Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _entryController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _bgFade = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
+      parent: _entryController,
+      curve: const Interval(0, 0.4, curve: Curves.easeOut),
+    ));
+    _iconScale = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
+      parent: _entryController,
+      curve: const Interval(0.1, 0.55, curve: Curves.elasticOut),
+    ));
+    _textFade = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
+      parent: _entryController,
+      curve: const Interval(0.35, 0.85, curve: Curves.easeOut),
+    ));
+    _textSlide = Tween<Offset>(
+      begin: const Offset(0, 0.25),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _entryController,
+      curve: const Interval(0.35, 0.85, curve: Curves.easeOutCubic),
+    ));
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.12, end: 0.3).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _entryController.forward();
+
+    Future.delayed(const Duration(milliseconds: 3000), _dismiss);
+  }
+
+  void _dismiss() {
+    if (!mounted) return;
+    _entryController.reverse().then((_) {
+      if (mounted) widget.onDismiss();
+    });
+  }
+
+  @override
+  void dispose() {
+    _entryController.dispose();
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const iconColor = Color(0xFFFF6B6B);
+    final primary = widget.primaryColor;
+    return AnimatedBuilder(
+      animation: Listenable.merge([_entryController, _pulseController]),
+      builder: (context, _) {
+        return GestureDetector(
+          onTap: _dismiss,
+          child: Material(
+            color: Colors.black.withValues(alpha: 0.88 * _bgFade.value),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon with elastic scale
+                  Transform.scale(
+                    scale: _iconScale.value,
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: iconColor.withValues(alpha: 0.1),
+                        border: Border.all(
+                          color: iconColor.withValues(alpha: 0.25),
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: iconColor.withValues(alpha: _pulse.value),
+                            blurRadius: 40,
+                            spreadRadius: 5,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.dns_rounded,
+                        size: 40,
+                        color: iconColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+
+                  // Title
+                  FadeTransition(
+                    opacity: _textFade,
+                    child: SlideTransition(
+                      position: _textSlide,
+                      child: const Text(
+                        'Выберите сервер',
+                        style: TextStyle(
+                          fontFamily: 'SpaceGrotesk',
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Description
+                  FadeTransition(
+                    opacity: _textFade,
+                    child: SlideTransition(
+                      position: _textSlide,
+                      child: Text(
+                        'Для подключения необходимо\nвыбрать сервер из списка',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.white.withValues(alpha: 0.5),
+                          height: 1.5,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Hint chip
+                  FadeTransition(
+                    opacity: _textFade,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: primary.withValues(alpha: 0.15),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.touch_app_rounded,
+                            size: 14,
+                            color: primary.withValues(alpha: 0.6),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Нажмите на карточку «Сервер» ниже',
+                            style: TextStyle(
+                              fontFamily: 'SpaceGrotesk',
+                              fontSize: 12,
+                              color: primary.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

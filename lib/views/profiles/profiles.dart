@@ -1105,46 +1105,73 @@ class _SaveXParticleDialog extends StatefulWidget {
 
 class _SaveXParticleDialogState extends State<_SaveXParticleDialog>
     with TickerProviderStateMixin {
-  late AnimationController _particleController;
   late AnimationController _entranceController;
-  late List<_Particle> _particles;
-  final math.Random _rng = math.Random();
+  late Animation<double> _bgFade;
+  late Animation<double> _iconScale;
+  late Animation<double> _textFade;
+  late Animation<Offset> _textSlide;
+  late AnimationController _pulseController;
+  late Animation<double> _pulse;
   bool _isClosing = false;
+
+  // Staggered feature items
+  static const _features = [
+    _FeatureItem(
+      icon: Icons.speed_rounded,
+      color: Color(0xFFAB6BF0),
+      title: 'Высокая скорость',
+      subtitle: 'Премиум серверы без ограничений',
+    ),
+    _FeatureItem(
+      icon: Icons.shield_rounded,
+      color: Color(0xFF6BB8F0),
+      title: 'Надёжная защита',
+      subtitle: 'Приватность и безопасность данных',
+    ),
+    _FeatureItem(
+      icon: Icons.support_agent_rounded,
+      color: Color(0xFF6BF0A0),
+      title: 'Поддержка 24/7',
+      subtitle: 'Мы всегда на связи',
+    ),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _particles = List.generate(45, (_) => _Particle(
-      x: _rng.nextDouble(),
-      y: _rng.nextDouble(),
-      vx: (_rng.nextDouble() - 0.5) * 0.0004,
-      vy: (_rng.nextDouble() - 0.5) * 0.0004,
-      size: 1.5 + _rng.nextDouble() * 2.5,
-      opacity: 0.3 + _rng.nextDouble() * 0.7,
-    ));
-
-    _particleController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 60),
-    )..addListener(_drift);
-    _particleController.repeat();
-
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
-    )..forward();
-  }
+      duration: const Duration(milliseconds: 700),
+    );
+    _bgFade = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0, 0.4, curve: Curves.easeOut),
+    ));
+    _iconScale = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0.1, 0.55, curve: Curves.elasticOut),
+    ));
+    _textFade = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0.3, 0.8, curve: Curves.easeOut),
+    ));
+    _textSlide = Tween<Offset>(
+      begin: const Offset(0, 0.2),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0.3, 0.8, curve: Curves.easeOutCubic),
+    ));
 
-  void _drift() {
-    for (final p in _particles) {
-      p.x += p.vx;
-      p.y += p.vy;
-      if (p.x < 0) p.x += 1.0;
-      if (p.x > 1) p.x -= 1.0;
-      if (p.y < 0) p.y += 1.0;
-      if (p.y > 1) p.y -= 1.0;
-    }
-    if (mounted) setState(() {});
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.1, end: 0.25).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _entranceController.forward();
   }
 
   void _close() {
@@ -1157,8 +1184,8 @@ class _SaveXParticleDialogState extends State<_SaveXParticleDialog>
 
   @override
   void dispose() {
-    _particleController.dispose();
     _entranceController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -1167,202 +1194,212 @@ class _SaveXParticleDialogState extends State<_SaveXParticleDialog>
     final pc = widget.primaryColor;
 
     return AnimatedBuilder(
-      animation: _entranceController,
+      animation: Listenable.merge([_entranceController, _pulseController]),
       builder: (context, _) {
-        final t = Curves.easeOutCubic.transform(_entranceController.value);
-        final dialogScale = 0.92 + 0.08 * t;
-        final slideY = 10.0 * (1.0 - t);
-
-        return Material(
-          type: MaterialType.transparency,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _close,
-            child: Opacity(
-              opacity: t,
-              child: Stack(
-                children: [
-                  // Particle layer
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _ParticleNetworkPainter(
-                          particles: _particles,
-                          color: pc,
-                          progress: t,
-                          connectionDistance: 0.15,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Dialog
-                  Center(
-                    child: GestureDetector(
-                      onTap: () {},
-                      child: Transform.translate(
-                        offset: Offset(0, slideY),
-                        child: Transform.scale(
-                          scale: dialogScale,
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _close,
+          child: Material(
+            color: Colors.black.withValues(alpha: 0.92 * _bgFade.value),
+            child: SafeArea(
+              child: Center(
+                child: GestureDetector(
+                  onTap: () {}, // absorb taps on content
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 340),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Logo with elastic scale + glow
+                        Transform.scale(
+                          scale: _iconScale.value,
                           child: Container(
-                            constraints: const BoxConstraints(maxWidth: 340),
-                            margin: const EdgeInsets.symmetric(horizontal: 32),
+                            width: 88,
+                            height: 88,
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              color: const Color(0xFF0D0D0D),
-                              border: Border.all(
-                                color: const Color(0xFF1A1A1A),
-                              ),
+                              borderRadius: BorderRadius.circular(24),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.6),
-                                  blurRadius: 60,
-                                  spreadRadius: 10,
+                                  color: pc.withValues(alpha: _pulse.value),
+                                  blurRadius: 40,
+                                  spreadRadius: 5,
                                 ),
                               ],
                             ),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(20),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // Top accent line
-                                  Container(
-                                    height: 3,
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          pc.withValues(alpha: 0.0),
-                                          pc.withValues(alpha: 0.6),
-                                          pc.withValues(alpha: 0.0),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        // Logo
-                                        Container(
-                                          width: 56,
-                                          height: 56,
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(16),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: pc.withValues(alpha: 0.15),
-                                                blurRadius: 20,
-                                              ),
-                                            ],
-                                          ),
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(16),
-                                            child: Image.asset(
-                                              'assets/images/savex_logo.png',
-                                              width: 56,
-                                              height: 56,
-                                              fit: BoxFit.cover,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 18),
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Text(
-                                              'SaveX',
-                                              style: TextStyle(
-                                                fontFamily: 'SpaceGrotesk',
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.w700,
-                                                color: Colors.white,
-                                                letterSpacing: 0.3,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                  horizontal: 8, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(6),
-                                                color: pc.withValues(alpha: 0.15),
-                                                border: Border.all(
-                                                  color: pc.withValues(alpha: 0.25),
-                                                  width: 0.5,
-                                                ),
-                                              ),
-                                              child: Text(
-                                                'Premium',
-                                                style: TextStyle(
-                                                  fontFamily: 'SpaceGrotesk',
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: pc,
-                                                  letterSpacing: 0.5,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 14),
-                                        Text(
-                                          'Спасибо, что вы с нами!',
-                                          style: TextStyle(
-                                            fontFamily: 'SpaceGrotesk',
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                            color: Colors.white.withValues(alpha: 0.85),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Вы используете подписку SaveX Premium — это значит, что вы цените качество, скорость и стабильность. Мы рады, что вы выбрали нас.',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.white.withValues(alpha: 0.35),
-                                            height: 1.5,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 20),
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: TextButton(
-                                            onPressed: _close,
-                                            style: TextButton.styleFrom(
-                                              backgroundColor: const Color(0xFF151515),
-                                              padding: const EdgeInsets.symmetric(vertical: 12),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(12),
-                                                side: const BorderSide(
-                                                  color: Color(0xFF1A1A1A),
-                                                ),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              'Отлично!',
-                                              style: TextStyle(
-                                                fontFamily: 'SpaceGrotesk',
-                                                fontWeight: FontWeight.w500,
-                                                color: pc,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                              borderRadius: BorderRadius.circular(24),
+                              child: Image.asset(
+                                'assets/images/savex_logo.png',
+                                width: 88,
+                                height: 88,
+                                fit: BoxFit.cover,
                               ),
                             ),
                           ),
                         ),
+                        const SizedBox(height: 28),
+
+                        // Title + badge
+                        FadeTransition(
+                          opacity: _textFade,
+                          child: SlideTransition(
+                            position: _textSlide,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'SaveX',
+                                  style: TextStyle(
+                                    fontFamily: 'SpaceGrotesk',
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    gradient: LinearGradient(
+                                      colors: [pc, pc.withValues(alpha: 0.7)],
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: pc.withValues(alpha: 0.3),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Text(
+                                    'PREMIUM',
+                                    style: TextStyle(
+                                      fontFamily: 'SpaceGrotesk',
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Subtitle
+                        FadeTransition(
+                          opacity: _textFade,
+                          child: SlideTransition(
+                            position: _textSlide,
+                            child: Text(
+                              'Спасибо, что вы с нами!',
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Colors.white.withValues(alpha: 0.5),
+                                height: 1.5,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Hint chip
+                        FadeTransition(
+                          opacity: _textFade,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: pc.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: pc.withValues(alpha: 0.15),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.favorite_rounded,
+                                  size: 14,
+                                  color: pc.withValues(alpha: 0.6),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Вы цените качество и стабильность',
+                                  style: TextStyle(
+                                    fontFamily: 'SpaceGrotesk',
+                                    fontSize: 12,
+                                    color: pc.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 28),
+
+                        // Divider line
+                        FadeTransition(
+                          opacity: _textFade,
+                          child: Container(
+                            height: 1,
+                            margin: const EdgeInsets.symmetric(horizontal: 20),
+                            color: Colors.white.withValues(alpha: 0.06),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Feature cards with staggered animation
+                        for (int i = 0; i < _features.length; i++)
+                          _AnimatedFeatureCard(
+                            feature: _features[i],
+                            delay: 350 + i * 100,
+                            parentController: _entranceController,
+                          ),
+
+                        const SizedBox(height: 20),
+
+                        // Close button
+                        FadeTransition(
+                          opacity: _textFade,
+                          child: GestureDetector(
+                            onTap: _close,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                color: const Color(0xFF151515),
+                                border: Border.all(
+                                  color: const Color(0xFF1E1E1E),
+                                ),
+                              ),
+                              child: Text(
+                                'Понятно!',
+                                style: TextStyle(
+                                  fontFamily: 'SpaceGrotesk',
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: pc,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -1372,7 +1409,137 @@ class _SaveXParticleDialogState extends State<_SaveXParticleDialog>
   }
 }
 
-// ── Particle network painter ──
+class _FeatureItem {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  const _FeatureItem({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+  });
+}
+
+class _AnimatedFeatureCard extends StatefulWidget {
+  final _FeatureItem feature;
+  final int delay;
+  final AnimationController parentController;
+
+  const _AnimatedFeatureCard({
+    required this.feature,
+    required this.delay,
+    required this.parentController,
+  });
+
+  @override
+  State<_AnimatedFeatureCard> createState() => _AnimatedFeatureCardState();
+}
+
+class _AnimatedFeatureCardState extends State<_AnimatedFeatureCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fade;
+  late Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.15),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) _controller.forward();
+    });
+
+    // Reverse when parent reverses
+    widget.parentController.addStatusListener(_onParentStatus);
+  }
+
+  void _onParentStatus(AnimationStatus status) {
+    if (status == AnimationStatus.reverse) {
+      _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.parentController.removeStatusListener(_onParentStatus);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = widget.feature;
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: f.color.withValues(alpha: 0.15),
+              ),
+              color: f.color.withValues(alpha: 0.03),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: f.color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(f.icon, color: f.color, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        f.title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        f.subtitle,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Particle network painter (kept for potential reuse) ──
 class _ParticleNetworkPainter extends CustomPainter {
   final List<_Particle> particles;
   final Color color;
