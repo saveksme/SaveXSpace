@@ -1555,21 +1555,6 @@ class _ModeSelector extends StatelessWidget {
       children: [
         Expanded(
           child: _ModeCard(
-            icon: Icons.alt_route_rounded,
-            label: Intl.message(Mode.rule.name),
-            subtitle: isMobile ? 'По правилам' : 'Умная маршрутизация',
-            isSelected: currentMode == Mode.rule,
-            primaryColor: primaryColor,
-            isMobile: isMobile,
-            onTap: () {
-              HapticFeedback.selectionClick();
-              onModeChanged(Mode.rule);
-            },
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _ModeCard(
             icon: Icons.language_rounded,
             label: Intl.message(Mode.global.name),
             subtitle: isMobile ? 'Через прокси' : 'Весь трафик через прокси',
@@ -1579,6 +1564,21 @@ class _ModeSelector extends StatelessWidget {
             onTap: () {
               HapticFeedback.selectionClick();
               onModeChanged(Mode.global);
+            },
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _ModeCard(
+            icon: Icons.alt_route_rounded,
+            label: Intl.message(Mode.rule.name),
+            subtitle: isMobile ? 'По правилам' : 'Умная маршрутизация',
+            isSelected: currentMode == Mode.rule,
+            primaryColor: primaryColor,
+            isMobile: isMobile,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onModeChanged(Mode.rule);
             },
           ),
         ),

@@ -19,40 +19,65 @@ final pageScrollNotifier = ValueNotifier<double>(0.0);
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
+  static Future<void> _handleClipboardImport() async {
+    // Don't intercept if a text field is focused
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus != null) {
+      final ctx = focus.context;
+      if (ctx != null && ctx.findAncestorWidgetOfExactType<EditableText>() != null) {
+        return;
+      }
+    }
+    final data = await Clipboard.getData('text/plain');
+    final text = data?.text?.trim();
+    if (text == null || text.isEmpty) return;
+    if (text.startsWith('http://') || text.startsWith('https://')) {
+      appController.addProfileFormURL(text);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return HomeBackScopeContainer(
-      child: AppSidebarContainer(
-        child: Material(
-          color: context.colorScheme.surface,
-          child: Consumer(
-            builder: (context, ref, child) {
-              return child!;
-            },
-            child: Consumer(
-              builder: (_, ref, _) {
-                final navigationItems = ref
-                    .watch(currentNavigationItemsStateProvider)
-                    .value;
-                final isMobile = ref.watch(isMobileViewProvider);
-                return _HomePageView(
-                  navigationItems: navigationItems,
-                  pageBuilder: (_, index) {
-                    final navigationItem = navigationItems[index];
-                    final navigationView = navigationItem.builder(context);
-                    final view = KeepScope(
-                      keep: navigationItem.keep,
-                      child: isMobile
-                          ? navigationView
-                          : Navigator(
-                              pages: [MaterialPage(child: navigationView)],
-                              onDidRemovePage: (_) {},
-                            ),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyV, control: true): _handleClipboardImport,
+      },
+      child: Focus(
+        autofocus: true,
+        child: HomeBackScopeContainer(
+          child: AppSidebarContainer(
+            child: Material(
+              color: context.colorScheme.surface,
+              child: Consumer(
+                builder: (context, ref, child) {
+                  return child!;
+                },
+                child: Consumer(
+                  builder: (_, ref, _) {
+                    final navigationItems = ref
+                        .watch(currentNavigationItemsStateProvider)
+                        .value;
+                    final isMobile = ref.watch(isMobileViewProvider);
+                    return _HomePageView(
+                      navigationItems: navigationItems,
+                      pageBuilder: (_, index) {
+                        final navigationItem = navigationItems[index];
+                        final navigationView = navigationItem.builder(context);
+                        final view = KeepScope(
+                          keep: navigationItem.keep,
+                          child: isMobile
+                              ? navigationView
+                              : Navigator(
+                                  pages: [MaterialPage(child: navigationView)],
+                                  onDidRemovePage: (_) {},
+                                ),
+                        );
+                        return view;
+                      },
                     );
-                    return view;
                   },
-                );
-              },
+                ),
+              ),
             ),
           ),
         ),
