@@ -460,13 +460,28 @@ class BuildCommand extends Command {
 
     String? coreSha256;
 
-    if (Platform.isWindows) {
+    // Helper service + CORE_SHA256 in env.json are Windows-only concepts —
+    // gate on the TARGET, not the host OS. Otherwise cross-compiling Android
+    // on a Windows host would rebuild the Rust helper with a TOKEN derived
+    // from the android .so hash and overwrite env.json's CORE_SHA256 with a
+    // value that has nothing to do with the Windows core binary.
+    if (target == Target.windows) {
       coreSha256 = await Build.calcSha256(corePaths.first);
       try {
         await Build.buildHelper(target, coreSha256);
       } catch (e) {
         print('Warning: helper build skipped ($e). Cargo/Rust may not be installed.');
       }
+    } else {
+      // Preserve the existing CORE_SHA256 from env.json so non-Windows
+      // builds (Android, Linux, macOS) don't wipe the Windows helper token
+      // when they refresh APP_ENV.
+      try {
+        final existing =
+            jsonDecode(await File(join(current, 'env.json')).readAsString())
+                as Map;
+        coreSha256 = existing['CORE_SHA256'] as String?;
+      } catch (_) {}
     }
     await _buildEnvFile(env, coreSha256: coreSha256);
     if (out != 'app') {
