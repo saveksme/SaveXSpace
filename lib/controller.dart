@@ -781,6 +781,9 @@ extension SetupControllerExt on AppController {
       }
     } catch (e) {}
     final patchConfig = _ref.read(patchClashConfigProvider);
+    if (system.isDesktop && patchConfig.tun.enable) {
+      commonPrint.log('[TUN] Setup: platform=${Platform.operatingSystem}, tunEnable=${patchConfig.tun.enable}, stack=${patchConfig.tun.stack}');
+    }
     final res = await _requestAdmin(patchConfig.tun.enable);
     if (res.isError) {
       return;
@@ -843,14 +846,19 @@ extension CoreControllerExt on AppController {
   Future<Result<bool>> _requestAdmin(bool enableTun) async {
     final realTunEnable = _ref.read(realTunEnableProvider);
     if (enableTun != realTunEnable && realTunEnable == false) {
+      commonPrint.log('[TUN] Requesting admin privileges, enableTun=$enableTun, realTunEnable=$realTunEnable');
       final code = await system.authorizeCore();
       switch (code) {
         case AuthorizeCode.success:
+          commonPrint.log('[TUN] Admin authorization succeeded, restarting core');
           await restartCore();
           return Result.error('');
         case AuthorizeCode.none:
+          commonPrint.log('[TUN] Already running as admin');
           break;
         case AuthorizeCode.error:
+          commonPrint.log('[TUN] Admin authorization failed — helper service not available', logLevel: LogLevel.error);
+          _context.showNotifier('TUN: helper service failed to start, check logs');
           enableTun = false;
           break;
       }
@@ -877,6 +885,15 @@ extension CoreControllerExt on AppController {
     }
     await restartCore(start);
     return true;
+  }
+
+  Future<void> tryReconnectVpn() async {
+    if (!system.isAndroid) return;
+    if (!_ref.read(isStartProvider)) return;
+    await globalState.updateStartTime();
+    if (globalState.isStart) return;
+    commonPrint.log('VPN service died, attempting reconnect');
+    await updateStatus(true);
   }
 
   void handleCoreDisconnected() {

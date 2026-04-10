@@ -129,7 +129,10 @@ func updateListeners() {
 	listener.ReCreateVmess(general.VmessConfig, tunnel.Tunnel)
 	listener.ReCreateTuic(general.TuicServer, tunnel.Tunnel)
 	if !features.Android {
+		log.Infoln("[TUN] Creating TUN listener: enable=%v, stack=%s, device=%s, autoRoute=%v",
+			general.Tun.Enable, general.Tun.Stack, general.Tun.Device, general.Tun.AutoRoute)
 		listener.ReCreateTun(general.Tun, tunnel.Tunnel)
+		log.Infoln("[TUN] TUN listener created successfully")
 	}
 }
 
@@ -180,6 +183,9 @@ func readFile(path string) ([]byte, error) {
 func updateConfig(params *UpdateParams) {
 	runLock.Lock()
 	defer runLock.Unlock()
+	if currentConfig == nil {
+		return
+	}
 	general := currentConfig.General
 	if params.MixedPort != nil {
 		general.MixedPort = *params.MixedPort
@@ -224,6 +230,8 @@ func updateConfig(params *UpdateParams) {
 	}
 
 	if params.Tun != nil {
+		log.Infoln("[TUN] Updating config: enable=%v, stack=%s, device=%s, autoRoute=%v, dnsHijack=%v",
+			params.Tun.Enable, *params.Tun.Stack, *params.Tun.Device, *params.Tun.AutoRoute, *params.Tun.DNSHijack)
 		general.Tun.Enable = params.Tun.Enable
 		general.Tun.AutoRoute = *params.Tun.AutoRoute
 		general.Tun.Device = *params.Tun.Device

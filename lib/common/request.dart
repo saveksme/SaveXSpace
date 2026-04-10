@@ -173,6 +173,9 @@ class Request {
       }
       final helperToken = response.data as String;
       final appSha = globalState.coreSHA256;
+      if (helperToken != appSha) {
+        commonPrint.log('[TUN] SHA256 mismatch: helper=$helperToken, app=$appSha', logLevel: LogLevel.warning);
+      }
       return helperToken == appSha;
     } catch (e) {
       return false;

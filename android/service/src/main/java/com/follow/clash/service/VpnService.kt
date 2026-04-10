@@ -237,9 +237,12 @@ class VpnService : SystemVpnService(), IBaseService,
         try {
             loader.load()
             State.options?.let {
+                GlobalState.log("[VPN] Starting VPN service, stack=${it.stack}, ipv6=${it.ipv6}")
                 handleStart(it)
+                GlobalState.log("[VPN] VPN service started successfully")
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            GlobalState.log("[VPN] VPN start failed: ${e.message}")
             stop()
         }
     }

@@ -216,6 +216,7 @@ class Build {
       final execLines = [
         'go',
         'build',
+        '-trimpath',
         '-ldflags=-w -s',
         '-tags=$tags',
         if (isLib) '-buildmode=c-shared',

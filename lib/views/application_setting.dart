@@ -1,6 +1,7 @@
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/controller.dart';
 import 'package:fl_clash/providers/config.dart';
+import 'package:fl_clash/state.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -283,6 +284,32 @@ class AutoCheckUpdateItem extends ConsumerWidget {
   }
 }
 
+class ClearDataItem extends StatelessWidget {
+  const ClearDataItem({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListItem(
+      leading: const Icon(Icons.delete_forever, color: Colors.red),
+      title: Text(
+        appLocalizations.clearData,
+        style: const TextStyle(color: Colors.red),
+      ),
+      subtitle: Text(appLocalizations.confirmClearAllData),
+      minVerticalPadding: 12,
+      onTap: () async {
+        final res = await globalState.showMessage(
+          message: TextSpan(text: appLocalizations.confirmClearAllData),
+        );
+        if (res != true) {
+          return;
+        }
+        await appController.handleClear();
+      },
+    );
+  }
+}
+
 class ApplicationSettingView extends StatelessWidget {
   const ApplicationSettingView({super.key});
 
@@ -304,6 +331,7 @@ class ApplicationSettingView extends StatelessWidget {
       CloseConnectionsItem(),
       UsageItem(),
       AutoCheckUpdateItem(),
+      const ClearDataItem(),
     ];
     return BaseScaffold(
       title: appLocalizations.application,

@@ -890,6 +890,7 @@ class _CoreStatusDotState extends State<_CoreStatusDot>
   double _prevLabelW = 0;
   double _currentLabelW = 0;
   bool _widthsCalculated = false;
+  TextScaler _textScaler = TextScaler.noScaling;
 
   @override
   void initState() {
@@ -917,6 +918,7 @@ class _CoreStatusDotState extends State<_CoreStatusDot>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _textScaler = MediaQuery.textScalerOf(context);
     _calculateWidths();
   }
 
@@ -931,6 +933,7 @@ class _CoreStatusDotState extends State<_CoreStatusDot>
       text: TextSpan(text: label, style: _labelWidthStyle),
       maxLines: 1,
       textDirection: TextDirection.ltr,
+      textScaler: _textScaler,
     )..layout();
     final w = tp.width;
     tp.dispose();
@@ -1719,7 +1722,11 @@ class _ModeCardState extends State<_ModeCard>
                         color: sel ? Colors.white : Colors.white38,
                         letterSpacing: -0.1,
                       ),
-                      child: Text(widget.label),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(widget.label),
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(

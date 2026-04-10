@@ -54,4 +54,10 @@ Name: "{autoprograms}\SaveX Space"; Filename: "{app}\SaveXSpace.exe"
 Name: "{autodesktop}\SaveX Space"; Filename: "{app}\SaveXSpace.exe"; Tasks: desktopicon
 
 [Run]
+Filename: "sc"; Parameters: "create SaveXSpaceHelperService binPath= ""{app}\SaveXSpaceHelperService.exe"" start= auto"; Flags: runhidden
+Filename: "sc"; Parameters: "start SaveXSpaceHelperService"; Flags: runhidden
 Filename: "{app}\SaveXSpace.exe"; Description: "{cm:LaunchProgram,SaveX Space}"; Flags: runascurrentuser nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "sc"; Parameters: "stop SaveXSpaceHelperService"; Flags: runhidden
+Filename: "sc"; Parameters: "delete SaveXSpaceHelperService"; Flags: runhidden

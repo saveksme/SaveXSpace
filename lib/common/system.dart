@@ -210,6 +210,7 @@ class Windows {
   Future<WindowsHelperServiceStatus> checkService() async {
     final result = await Process.run('sc', ['query', appHelperService]);
     if (result.exitCode != 0) {
+      commonPrint.log('[TUN] Helper service not found (sc query failed)');
       return WindowsHelperServiceStatus.none;
     }
     final output = result.stdout.toString();
@@ -219,6 +220,9 @@ class Windows {
       if (pingOk) {
         return WindowsHelperServiceStatus.running;
       }
+      commonPrint.log('[TUN] Helper service RUNNING but ping failed (SHA256 mismatch or unreachable)', logLevel: LogLevel.warning);
+    } else {
+      commonPrint.log('[TUN] Helper service exists but not running: ${output.trim()}', logLevel: LogLevel.warning);
     }
     return WindowsHelperServiceStatus.presence;
   }
@@ -228,6 +232,13 @@ class Windows {
 
     if (status == WindowsHelperServiceStatus.running) {
       return true;
+    }
+
+    final helperExists = File(appPath.helperPath).existsSync();
+    commonPrint.log('[TUN] registerService: status=$status, helperPath=${appPath.helperPath}, helperExists=$helperExists');
+    if (!helperExists) {
+      commonPrint.log('[TUN] Helper binary not found at ${appPath.helperPath}', logLevel: LogLevel.error);
+      return false;
     }
 
     final command = [
@@ -257,13 +268,18 @@ class Windows {
     final res = runas('cmd.exe', command);
 
     await Future.delayed(Duration(milliseconds: 300));
-    final retryStatus = await retry(
-      task: checkService,
-      maxAttempts: 5,
-      retryIf: (status) => status != WindowsHelperServiceStatus.running,
-      delay: Duration(seconds: 1),
-    );
-    return res && retryStatus == WindowsHelperServiceStatus.running;
+    try {
+      final retryStatus = await retry(
+        task: checkService,
+        maxAttempts: 5,
+        retryIf: (status) => status != WindowsHelperServiceStatus.running,
+        delay: Duration(seconds: 1),
+      );
+      return res && retryStatus == WindowsHelperServiceStatus.running;
+    } catch (e) {
+      commonPrint.log('[TUN] Helper service failed to start after retries: $e', logLevel: LogLevel.error);
+      return false;
+    }
   }
 
   Future<bool> registerTask(String appName) async {
